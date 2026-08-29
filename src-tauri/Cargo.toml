@@ -23,6 +23,7 @@ tauri = { version = "2", features = ["macos-private-api", "tray-icon", "image-pn
 tauri-plugin-autostart = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-log = "2"
+tauri-plugin-notification = "2"
 tauri-plugin-single-instance = "2"
 tauri-plugin-updater = "2"
 serde = { version = "1", features = ["derive"] }
@@ -48,6 +49,10 @@ tokio = { version = "1", features = ["process", "time", "rt", "macros", "net"] }
 regex = "1"
 open = "5"
 axum = { version = "0.8", default-features = false, features = ["http1", "tokio", "query", "json"] }
+# 钉钉机器人「加签」安全模式：HMAC-SHA256 + base64
+hmac = "0.12"
+sha2 = "0.10"
+base64 = "0.22"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 libc = "0.2"

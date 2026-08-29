@@ -50,8 +50,12 @@ const LEGACY_TO_NEW: Record<string, string> = {
   // selection ids and aggregates inside hosts_apply.
   setSystemHosts: 'apply_hosts_selection',
   refreshHosts: 'refresh_remote_hosts',
+  refreshAllRemoteHosts: 'refresh_all_remote_hosts',
+  pickSavePath: 'pick_save_path',
   getHistoryList: 'get_apply_history',
   deleteHistory: 'delete_apply_history_item',
+  deleteHistoryMany: 'delete_apply_history_items',
+  clearHistory: 'clear_apply_history',
 
   cmdGetHistoryList: 'cmd_get_history_list',
   cmdDeleteHistory: 'cmd_delete_history_item',

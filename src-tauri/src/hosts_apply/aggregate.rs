@@ -65,6 +65,11 @@ fn collect_selected(
 }
 
 fn is_on(node: &Value) -> bool {
+    // 仅抓取/触发（as_hosts === false）的方案内容永远不进入系统 hosts，
+    // 即使开关是开的。
+    if node.get("as_hosts").and_then(Value::as_bool) == Some(false) {
+        return false;
+    }
     node.get("on").and_then(Value::as_bool).unwrap_or(false)
 }
 
@@ -173,4 +178,50 @@ fn line_ending() -> &'static str {
 #[cfg(not(target_os = "windows"))]
 fn line_ending() -> &'static str {
     "\n"
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::storage::paths::V5Paths;
+    use serde_json::json;
+
+    fn temp_paths(name: &str) -> V5Paths {
+        let root = std::env::temp_dir().join(format!(
+            "swh-aggregate-test-{name}-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let paths = V5Paths::under(root);
+        std::fs::create_dir_all(&paths.entries_dir).unwrap();
+        paths
+    }
+
+    #[test]
+    fn fetch_only_nodes_are_excluded_from_aggregation() {
+        let paths = temp_paths("fetch-only");
+        entries::write_entry(&paths.entries_dir, "hosts-node", "127.0.0.1 a.com\n").unwrap();
+        entries::write_entry(&paths.entries_dir, "fetch-node", "{\"code\":200}\n").unwrap();
+
+        // hosts-node: as_hosts → included. fetch-node: as_hosts=false,
+        // on=true → must still be excluded. no-as-host: as_hosts 缺省 →
+        // 视为 hosts（entries 缺失 → 空内容，不报错）。
+        let list = json!([
+            { "id": "hosts-node", "type": "remote", "on": true, "as_hosts": true },
+            { "id": "fetch-node", "type": "remote", "on": true, "as_hosts": false },
+            { "id": "no-as-host", "type": "remote", "on": true },
+        ])
+        .as_array()
+        .cloned()
+        .unwrap();
+
+        let content = aggregate_selected_content(&list, &paths, false).unwrap();
+
+        assert!(content.contains("127.0.0.1 a.com"));
+        assert!(!content.contains("code"));
+        std::fs::remove_dir_all(&paths.root).ok();
+    }
 }

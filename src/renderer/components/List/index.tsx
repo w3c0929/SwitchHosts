@@ -3,14 +3,14 @@
  * @homepage: https://oldj.net
  */
 
-import { IHostsListObject } from '@common/data'
+import { IHostsListObject, IOperationResult } from '@common/data'
 import events from '@common/events'
 import { findItemById, flatten, getNextSelectedItem, setOnStateOfItem } from '@common/hostsFn'
 import { IFindShowSourceParam } from '@common/types'
 import ItemIcon from '@renderer/components/ItemIcon'
 import { Tree } from '@renderer/components/Tree'
 import { actions, agent } from '@renderer/core/agent'
-import { showErrorNotification } from '@renderer/core/notify'
+import { showErrorNotification, showSuccessNotification } from '@renderer/core/notify'
 import useOnBroadcast from '@renderer/core/useOnBroadcast'
 import useConfigs from '@renderer/models/useConfigs'
 import useHostsData from '@renderer/models/useHostsData'
@@ -144,7 +144,8 @@ const List = (props: Props) => {
         const list: IHostsListObject[] = await actions.getList()
         const hasEnabledChangedHosts = changedIds.some((id) => {
           const hosts = findItemById(list, id)
-          return !!hosts?.on
+          // 仅抓取/触发（as_hosts = false）的方案永不触发系统 hosts 重写
+          return !!hosts?.on && hosts.as_hosts !== false
         })
         if (!hasEnabledChangedHosts) continue
 
@@ -218,6 +219,51 @@ const List = (props: Props) => {
   )
 
   useOnBroadcast(events.reload_list, loadHostsData)
+
+  // 下载型方案完成/失败提示：成功通知每次触发都提示（用户明确要求），
+    // 失败提示保留限频（60 秒）防止短间隔重试刷屏。
+  const lastDownloadNotifyShownRef = useRef<Map<string, number>>(new Map())
+  useOnBroadcast(
+    events.download_done,
+    (payload: { id?: string; success?: boolean; message?: string }) => {
+      if (!payload?.success) {
+        const now = Date.now()
+        const key = payload?.id || 'all'
+        const last = lastDownloadNotifyShownRef.current.get(key) || 0
+        if (now - last < 60_000) return
+        lastDownloadNotifyShownRef.current.set(key, now)
+        showErrorNotification({
+          title: lang.download,
+          message: payload.message || lang.fail,
+        })
+        return
+      }
+      showSuccessNotification({
+        title: lang.download,
+        message: payload.message || lang.success,
+      })
+    },
+    [lang],
+  )
+
+  // 自动刷新失败提示（限频：同一方案 60 秒内最多提示一次），
+  // 让「刷新失败」与「没有运行」在界面上可区分。
+  const lastRefreshFailShownRef = useRef<Map<string, number>>(new Map())
+  useOnBroadcast(
+    events.hosts_refresh_failed,
+    (payload: IOperationResult & { id?: string }) => {
+      const now = Date.now()
+      const key = payload?.id || 'all'
+      const last = lastRefreshFailShownRef.current.get(key) || 0
+      if (now - last < 60_000) return
+      lastRefreshFailShownRef.current.set(key, now)
+      showErrorNotification({
+        title: lang.auto_refresh,
+        message: payload?.message || (payload?.code != null ? String(payload.code) : lang.fail),
+      })
+    },
+    [lang],
+  )
 
   useOnBroadcast(
     events.hosts_content_changed,

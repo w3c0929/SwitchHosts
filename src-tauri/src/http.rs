@@ -33,9 +33,29 @@ const USER_AGENT: &str = concat!(
 /// Returns a `String` error so commands can convert it to whatever
 /// renderer-facing shape they need.
 pub fn build_client(state: &AppState) -> Result<reqwest::Client, String> {
+    base_client(DEFAULT_TIMEOUT, true, state)
+}
+
+/// Client for binary downloads of fetch-only remote schemes: same
+/// default timeout (no special limits), but **transparent content
+/// decompression is disabled** — gzip / brotli / deflate responses are
+/// written to disk byte-for-byte, since a binary file served with
+/// `Content-Encoding` must not be silently decompressed into garbage.
+pub fn build_download_client(state: &AppState) -> Result<reqwest::Client, String> {
+    base_client(DEFAULT_TIMEOUT, false, state)
+}
+
+fn base_client(
+    timeout: Duration,
+    auto_decompress: bool,
+    state: &AppState,
+) -> Result<reqwest::Client, String> {
     let mut builder = reqwest::Client::builder()
-        .timeout(DEFAULT_TIMEOUT)
+        .timeout(timeout)
         .user_agent(USER_AGENT);
+    if !auto_decompress {
+        builder = builder.no_gzip().no_brotli().no_deflate();
+    }
 
     let proxy_url = configured_proxy_url_from_state(state);
 

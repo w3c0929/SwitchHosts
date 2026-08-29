@@ -437,6 +437,10 @@ pub async fn set_list(state: State<'_, AppState>, args: Args) -> Result<Value, S
     let mut m = load_manifest(&state).unwrap_or_default();
     m.root = root;
     save_manifest(&state, &m)?;
+    // A list change may have enabled a remote scheme (or changed its
+    // interval): wake the background refresh scanner so it re-evaluates
+    // due nodes immediately instead of sleeping out its current delay.
+    state.refresh_wake.notify_one();
     Ok(Value::Null)
 }
 
@@ -821,6 +825,30 @@ pub async fn helper_open_login_items() -> Value {
     Value::Null
 }
 
+/// Open a native "save file" dialog prefilled with a suggested file
+/// name and return the chosen path, or null when cancelled. Used by the
+/// remote-hosts editor to pick the `save_path` mirror-copy location.
+#[tauri::command]
+pub async fn pick_save_path<R: Runtime>(app: AppHandle<R>, args: Args) -> Value {
+    let default_name = args
+        .first()
+        .and_then(Value::as_str)
+        .filter(|s| !s.is_empty())
+        .unwrap_or("hosts.hosts");
+    let picked = app
+        .dialog()
+        .file()
+        .set_file_name(default_name)
+        .blocking_save_file();
+    match picked {
+        Some(p) => match p.into_path() {
+            Ok(path) => Value::String(path.display().to_string()),
+            Err(_) => Value::Null,
+        },
+        None => Value::Null,
+    }
+}
+
 #[tauri::command]
 pub async fn refresh_remote_hosts<R: Runtime>(
     app: AppHandle<R>,
@@ -886,8 +914,41 @@ pub async fn delete_apply_history_item(
     state.require_data_dir_usable()?;
     let id = arg_str(&args, 0, "id")?;
     let path = state.paths.histories_dir.join("system-hosts.json");
-    let removed = hosts_apply::history::delete_by_id(&path, id)?;
+    let removed = hosts_apply::history::delete_many(&path, &[id.to_string()])?;
     Ok(json!(removed))
+}
+
+#[tauri::command]
+pub async fn delete_apply_history_items(
+    state: State<'_, AppState>,
+    args: Args,
+) -> Result<Value, StorageError> {
+    state.require_data_dir_usable()?;
+    let ids_value = args.into_iter().next().unwrap_or(Value::Null);
+    let ids: Vec<String> = match ids_value {
+        Value::Array(arr) => arr
+            .into_iter()
+            .filter_map(|v| v.as_str().map(String::from))
+            .collect(),
+        _ => Vec::new(),
+    };
+    if ids.is_empty() {
+        return Ok(json!(false));
+    }
+    let path = state.paths.histories_dir.join("system-hosts.json");
+    let removed = hosts_apply::history::delete_many(&path, &ids)?;
+    Ok(json!(removed))
+}
+
+#[tauri::command]
+pub async fn clear_apply_history(
+    state: State<'_, AppState>,
+    _args: Args,
+) -> Result<Value, StorageError> {
+    state.require_data_dir_usable()?;
+    let path = state.paths.histories_dir.join("system-hosts.json");
+    hosts_apply::history::clear(&path)?;
+    Ok(Value::Null)
 }
 
 // ---- cmd_after_hosts_apply history -----------------------------------------

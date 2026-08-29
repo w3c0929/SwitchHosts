@@ -11,6 +11,7 @@ package-lock.json
 build
 build-tauri
 dist
+build-artifacts
 
 # misc
 .DS_Store

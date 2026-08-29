@@ -31,6 +31,9 @@ const ListItem = (props: Props) => {
   const { lang, i18n } = useI18n()
   const { currentHosts, setCurrentHosts } = useHostsData()
   const [isOn, setIsOn] = useState(data.on)
+  // 同步显示「最后刷新」时间：手动/自动刷新都会广播 hosts_refreshed，
+  // 让列表行的开关下方即时更新；列表重载时也从 data 还原。
+  const [lastRefresh, setLastRefresh] = useState(data.last_refresh)
   const el = useRef<HTMLDivElement>(null)
   // const [item_height, setItemHeight] = useState(0)
   const refToastRefresh = useRef<string | null>(null)
@@ -39,6 +42,20 @@ const ListItem = (props: Props) => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- mirror prop into local optimistic state
     setIsOn(data.on)
   }, [data])
+
+  useEffect(() => {
+    setLastRefresh(data.last_refresh)
+  }, [data])
+
+  useOnBroadcast(
+    events.hosts_refreshed,
+    (refreshed: IHostsListObject) => {
+      if (refreshed && refreshed.id === data.id && refreshed.last_refresh) {
+        setLastRefresh(refreshed.last_refresh)
+      }
+    },
+    [data.id],
+  )
 
   // Roll-back signal from List/index.tsx::onToggleItem. The optimistic
   // toggle in `toggleOn` flips `isOn` locally before the apply round
@@ -87,6 +104,11 @@ const ListItem = (props: Props) => {
   const isFolder = data.type === 'folder'
   const isSelected = data.id === currentHosts?.id
   const title = data.title || lang.untitled
+  // 第二行显示最后刷新时间（精确到秒）
+  const lastRefreshText =
+    data.type === 'remote' && lastRefresh
+      ? `${lang.last_refresh.replace(/[:：]\s*$/, '')} ${lastRefresh}`
+      : null
 
   return (
     <div
@@ -171,12 +193,19 @@ const ListItem = (props: Props) => {
           agent.broadcast(events.active_main_window)
         }}
       >
-        <span className={clsx(styles.icon, isFolder && styles.folder)}>
-          <ItemIcon type={data.is_sys ? 'system' : data.type} isCollapsed={data.is_collapsed} />
-        </span>
-        <span className={styles.label} title={title}>
-          {title}
-        </span>
+        <div className={styles.title_row}>
+          <span className={clsx(styles.icon, isFolder && styles.folder)}>
+            <ItemIcon type={data.is_sys ? 'system' : data.type} isCollapsed={data.is_collapsed} />
+          </span>
+          <span className={styles.label} title={title}>
+            {title}
+          </span>
+        </div>
+        {lastRefreshText ? (
+          <div className={styles.last_refresh} title={`${lang.last_refresh}${lastRefresh}`}>
+            {lastRefreshText}
+          </div>
+        ) : null}
       </div>
       <div className={styles.status}>
         {data.is_sys ? null : (

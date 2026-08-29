@@ -4,8 +4,6 @@
  * @homepage: https://oldj.net
  */
 
-import * as os from 'os'
-
 export interface INormalizeOptions {
   remove_duplicate_records?: boolean
 }
@@ -78,7 +76,9 @@ const removeDuplicateRecords = (content: string): string => {
     }
   })
 
-  return newLines.join(os.EOL)
+  // 统一使用 LF（与 entries 存储、测试夹具的约定一致），避免
+  // 平台相关换行导致输出在不同系统上不一致
+  return newLines.join('\n')
 }
 
 export default (

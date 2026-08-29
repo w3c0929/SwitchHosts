@@ -54,6 +54,12 @@ pub struct AppState {
     /// the Moved/Resized handlers in `lifecycle` to coalesce writes
     /// during a drag (which fires 60 events/sec on macOS).
     pub last_geometry_persist_ms: AtomicU64,
+    /// Wakes the remote-hosts background scanner immediately instead of
+    /// letting it sleep out its current delay. Triggered by `set_list`
+    /// (every toggle / edit / reorder lands there), so flipping a remote
+    /// scheme on is picked up within milliseconds rather than up to the
+    /// next 60s idle poll.
+    pub refresh_wake: tokio::sync::Notify,
     /// Set at startup when a recorded custom data directory could not be
     /// used — it has gone missing (moved/deleted, or can't host the layout),
     /// or its pointer file is unreadable/corrupt. The renderer reads this via
@@ -143,6 +149,7 @@ impl AppState {
             update_check_lock: tokio::sync::Mutex::new(()),
             is_will_quit: AtomicBool::new(false),
             last_geometry_persist_ms: AtomicU64::new(0),
+            refresh_wake: tokio::sync::Notify::new(),
             data_dir_recovery,
         })
     }
@@ -195,6 +202,7 @@ mod tests {
             update_check_lock: tokio::sync::Mutex::new(()),
             is_will_quit: AtomicBool::new(false),
             last_geometry_persist_ms: AtomicU64::new(0),
+            refresh_wake: tokio::sync::Notify::new(),
             data_dir_recovery: recovery,
         }
     }

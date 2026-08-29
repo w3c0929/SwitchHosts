@@ -15,6 +15,7 @@ mod migration;
 mod refresh;
 mod storage;
 mod tray;
+mod webhook;
 mod window_theme;
 
 use serde_json::json;
@@ -143,6 +144,7 @@ pub fn run() {
             Some(vec![lifecycle::LOGIN_LAUNCH_ARG]),
         ))
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(
             tauri_plugin_log::Builder::new()
@@ -510,8 +512,11 @@ pub fn run() {
             commands::helper_open_login_items,
             commands::refresh_remote_hosts,
             commands::refresh_all_remote_hosts,
+            commands::pick_save_path,
             commands::get_apply_history,
             commands::delete_apply_history_item,
+            commands::delete_apply_history_items,
+            commands::clear_apply_history,
             // cmd_after_hosts_apply history
             commands::cmd_get_history_list,
             commands::cmd_delete_history_item,

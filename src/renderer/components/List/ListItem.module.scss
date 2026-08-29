@@ -9,6 +9,12 @@
     }
   }
 
+  // 悬停 / 选中时第二行「最后刷新」反色，保证在强调背景上可读
+  &:hover .last_refresh,
+  &.selected .last_refresh {
+    color: var(--swh-font-color-reverse);
+  }
+
   .edit {
     display: none;
     align-items: center;
@@ -27,18 +33,24 @@
   }
 }
 
+// 列表项两行布局：第一行（图标+标题+开关），第二行（最后刷新时间）
 .title {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  justify-content: center;
   flex: 1 1 auto;
   min-width: 0;
   position: relative;
-  //padding-left: 10px;
-  height: var(--swh-tree-row-height);
+  min-height: var(--swh-tree-row-height);
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
   cursor: default;
+}
+
+.title_row {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  height: var(--swh-tree-row-height);
 }
 
 .folder_open {
@@ -81,6 +93,17 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.last_refresh {
+  font-size: 10px;
+  line-height: 1.2em;
+  padding: 0 0 3px;
+  margin-left: 1.5em; // 与标题文字起点（图标右侧）对齐
+  color: var(--swh-font-color-weak);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .status {

@@ -14,6 +14,19 @@ export interface IHostsListObject {
   last_refresh?: string
   last_refresh_ms?: number
   refresh_interval?: number // 单位：秒
+  // 可选：刷新远程内容后，将下载的内容另存到该文件路径
+  save_path?: string
+  // 内容用途：false = 仅定时抓取/触发（不写入 hosts）；缺省/true = 作为 hosts 内容
+  as_hosts?: boolean
+  // 下载型方案的通知：当前渠道（wecom 企业微信 / dingtalk 钉钉 / other 其他）
+// 与【按渠道各自独立】的 webhook 列表；切换渠道不影响其他渠道的配置
+notify_channel?: string
+notify_webhooks?: Record<string, string[]>
+// 钉钉「加签」密钥（按渠道平行存储，与 webhooks 下标一一对应）
+notify_webhook_secrets?: Record<string, string[]>
+// 自定义通知内容（支持占位符 {title} {result} {message}）与格式（text / markdown）
+notify_message?: string
+notify_format?: 'text' | 'markdown'
 
   // group
   include?: string[]

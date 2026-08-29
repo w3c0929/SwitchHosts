@@ -78,12 +78,82 @@ pub fn insert(path: &Path, item: ApplyHistoryItem, history_limit: i32) -> Result
 
 /// Remove the entry with `id`. Returns true if a row was removed.
 pub fn delete_by_id(path: &Path, id: &str) -> Result<bool, StorageError> {
+    delete_many(path, std::slice::from_ref(&id.to_string()))
+}
+
+/// Remove every entry whose id is in `ids` in a single atomic write.
+/// Returns true if at least one row was removed.
+pub fn delete_many(path: &Path, ids: &[String]) -> Result<bool, StorageError> {
+    if ids.is_empty() {
+        return Ok(false);
+    }
     let mut items = load(path)?;
     let before = items.len();
-    items.retain(|i| i.id != id);
+    items.retain(|i| !ids.iter().any(|id| &i.id == id));
     if items.len() == before {
         return Ok(false);
     }
     save(path, &items)?;
     Ok(true)
+}
+
+/// Remove all apply-history entries.
+pub fn clear(path: &Path) -> Result<(), StorageError> {
+    save(path, &[])
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn temp_file(name: &str) -> std::path::PathBuf {
+        std::env::temp_dir().join(format!(
+            "swh-history-test-{name}-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ))
+    }
+
+    fn item(id: &str) -> ApplyHistoryItem {
+        ApplyHistoryItem {
+            id: id.to_string(),
+            content: "127.0.0.1 a.com".to_string(),
+            add_time_ms: 1_700_000_000_000,
+            label: None,
+        }
+    }
+
+    #[test]
+    fn delete_many_removes_selected_ids_in_one_write() {
+        let path = temp_file("delete-many");
+        save(&path, &[item("a"), item("b"), item("c")]).unwrap();
+
+        let removed = delete_many(&path, &["a".to_string(), "c".to_string()]).unwrap();
+        assert!(removed);
+        let items = load(&path).unwrap();
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].id, "b");
+
+        // 再删一次（b 不在目标内外的组合）→ 全部删掉
+        assert!(delete_many(&path, &["b".to_string()]).unwrap());
+        assert!(load(&path).unwrap().is_empty());
+
+        // 空集合不写盘
+        assert!(!delete_many(&path, &[]).unwrap());
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn clear_wipes_every_entry() {
+        let path = temp_file("clear");
+        save(&path, &[item("a"), item("b")]).unwrap();
+
+        clear(&path).unwrap();
+
+        assert!(load(&path).unwrap().is_empty());
+        std::fs::remove_file(&path).ok();
+    }
 }
