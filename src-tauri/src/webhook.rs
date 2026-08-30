@@ -205,12 +205,13 @@ pub fn notify_download_outcome<R: Runtime>(
         }
     });
 
-    // 3. Webhook pushes (fire-and-forget) — 读取按渠道的 webhook 列表
-    //    （钉钉的「加签密钥」按同一渠道平行存储）。
-    let webhooks: Vec<String> = node
-        .get("notify_webhooks")
-        .and_then(Value::as_object)
-        .and_then(|m| m.get(channel))
+    // 3. Webhook pushes (fire-and-forget) — webhook 列表已迁移到全局配置
+    //    （AppConfig.notify_webhooks / notify_webhook_secrets），所有方案共用一份。
+    //    钉钉的「加签密钥」按同一渠道平行存储。
+    let cfg = state.config.lock().expect("config lock poisoned");
+    let webhooks: Vec<String> = cfg
+        .notify_webhooks
+        .get(channel)
         .and_then(Value::as_array)
         .map(|arr| {
             arr.iter()
@@ -220,9 +221,8 @@ pub fn notify_download_outcome<R: Runtime>(
         })
         .unwrap_or_default();
     let secrets: Vec<String> = if channel == CHANNEL_DINGTALK {
-        node.get("notify_webhook_secrets")
-            .and_then(Value::as_object)
-            .and_then(|m| m.get(CHANNEL_DINGTALK))
+        cfg.notify_webhook_secrets
+            .get(CHANNEL_DINGTALK)
             .and_then(Value::as_array)
             .map(|arr| {
                 arr.iter()
@@ -233,6 +233,7 @@ pub fn notify_download_outcome<R: Runtime>(
     } else {
         Vec::new()
     };
+    drop(cfg);
     if channel.is_empty() || webhooks.is_empty() {
         return;
     }

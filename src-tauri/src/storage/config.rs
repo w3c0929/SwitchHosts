@@ -68,6 +68,12 @@ pub struct AppConfig {
 
     // update
     pub auto_check_update: bool,
+
+    // global webhooks — shared across all schemes
+    // key = channel name (wecom / dingtalk / other), value = URL list
+    pub notify_webhooks: serde_json::Map<String, Value>,
+    // dingtalk signing secrets, indexed parallel to the dingtalk webhook list
+    pub notify_webhook_secrets: serde_json::Map<String, Value>,
 }
 
 impl Default for AppConfig {
@@ -111,6 +117,9 @@ impl Default for AppConfig {
             http_api_only_local: true,
 
             auto_check_update: true,
+
+            notify_webhooks: serde_json::Map::new(),
+            notify_webhook_secrets: serde_json::Map::new(),
         }
     }
 }

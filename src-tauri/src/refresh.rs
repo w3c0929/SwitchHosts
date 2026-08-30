@@ -169,11 +169,33 @@ async fn refresh_one_inner<R: Runtime>(
         //    不进 hosts 管线。
         match snapshot.get("save_path").and_then(Value::as_str) {
             Some(p) if !p.trim().is_empty() => {
-                let result = download_to_file(&url, p.trim(), state).await;
+                let save_path = p.trim();
+                let result = download_to_file(&url, save_path, state).await;
                 match result {
                     Ok(()) => {
+                        // 下载成功后，尝试读取文件内容写回 entries 缓存，
+                        // 供右侧编辑器查看（文本/JSON 等可正常显示；
+                        // 二进制文件写入提示信息，避免乱码）。
+                        if let Ok(bytes) = std::fs::read(save_path) {
+                            let preview = if let Ok(text) = String::from_utf8(bytes) {
+                                text
+                            } else {
+                                format!(
+                                    "[Binary file saved to {} — {} bytes]",
+                                    save_path,
+                                    std::fs::metadata(save_path)
+                                        .map(|m| m.len())
+                                        .unwrap_or(0)
+                                )
+                            };
+                            let _ = entries::write_entry(
+                                &state.paths.entries_dir,
+                                id,
+                                &entries::normalize_to_lf(&preview),
+                            );
+                        }
                         // 成功：不在抓取时快照上发通知，等 Step 4 用
-                        // 锁内重读的“最新”配置（updated_snapshot）再推送，
+                        // 锁内重读的"最新"配置（updated_snapshot）再推送，
                         // 避免抓取期间用户切换渠道/改 webhook 造成竞态。
                         download_success_notify = true;
                     }

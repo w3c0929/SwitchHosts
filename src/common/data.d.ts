@@ -21,11 +21,9 @@ export interface IHostsListObject {
   // 是否在右侧主编辑器区域显示内容：缺省/true = 显示；false = 隐藏
   show_content?: boolean
   // 下载型方案的通知：当前渠道（wecom 企业微信 / dingtalk 钉钉 / other 其他）
-// 与【按渠道各自独立】的 webhook 列表；切换渠道不影响其他渠道的配置
+// webhook 地址列表已迁移到全局配置（ConfigsType.notify_webhooks），所有方案共用一份
+// 此处仅保留面板状态（渠道选择）和 per-scheme 的消息模板/格式
 notify_channel?: string
-notify_webhooks?: Record<string, string[]>
-// 钉钉「加签」密钥（按渠道平行存储，与 webhooks 下标一一对应）
-notify_webhook_secrets?: Record<string, string[]>
 // 自定义通知内容（支持占位符 {title} {result} {message}）与格式（text / markdown）
 notify_message?: string
 notify_format?: 'text' | 'markdown'

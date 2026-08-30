@@ -47,6 +47,12 @@ const configs = {
 
   // other
   env: 'PROD' as 'PROD' | 'DEV',
+
+  // global webhooks — shared across all schemes
+  // key = channel name (wecom / dingtalk / other), value = URL list
+  notify_webhooks: {} as Record<string, string[]>,
+  // dingtalk signing secrets, indexed parallel to the dingtalk webhook list
+  notify_webhook_secrets: {} as Record<string, string[]>,
 }
 
 export type ConfigsType = typeof configs

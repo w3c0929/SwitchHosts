@@ -34,6 +34,7 @@ import { BiEdit, BiFolderOpen, BiPlus, BiTrash } from 'react-icons/bi'
 import { v4 as uuidv4 } from 'uuid'
 import useHostsData from '../models/useHostsData'
 import useI18n from '../models/useI18n'
+import useConfigs from '../models/useConfigs'
 import styles from './EditHostsInfo.module.scss'
 
 // 自动刷新预设间隔（单位：秒），与 Select 选项保持一致
@@ -76,6 +77,7 @@ const EditHostsInfo = () => {
   const { lang } = useI18n()
   const [hosts, setHosts] = useState<IHostsListObject | null>(null)
   const { hostsData, setList, currentHosts, setCurrentHosts } = useHostsData()
+  const { configs, updateConfigs } = useConfigs()
   const [isShow, setIsShow] = useState(false)
   const [isAdd, setIsAdd] = useState(true)
   const [isRefreshing, setIsRefreshing] = useState(false)
@@ -191,7 +193,7 @@ const EditHostsInfo = () => {
     const unit = customUnit ?? deriveCustomUnit(interval)
     const unitSecs = CUSTOM_UNIT_SECONDS[unit]
 
-    // 通知：按渠道各自独立的 webhook 表单
+    // 通知：webhook 地址列表为全局共享（所有方案共用一份），渠道选择为 per-scheme
     const notifyChannel = hosts?.notify_channel
     const channelLabel =
       notifyChannel === 'dingtalk'
@@ -199,29 +201,27 @@ const EditHostsInfo = () => {
         : notifyChannel === 'other'
           ? lang.notify_other
           : lang.notify_wecom
-    const notifyWebhooksAll = hosts?.notify_webhooks || {}
-    // 当前渠道的 webhook 列表。回退旧版共用 webhooks 字段仅当该节点
-    // 【完全没有】notify_webhooks（纯旧版数据、且恰好是当初的渠道）；
-    // 一旦用户编辑过（写入 notify_webhooks 后），或切到其他渠道，
-    // 一律显示空表单——切换选项不再串出企业微信的内容。
+    // webhook 列表从全局配置读取
+    const notifyWebhooksAll = configs?.notify_webhooks || {}
     const channelWebhooks = notifyChannel
-      ? notifyWebhooksAll[notifyChannel] ??
-        (!hosts?.notify_webhooks && Array.isArray(hosts?.webhooks)
-          ? (hosts.webhooks as string[])
-          : [])
+      ? (notifyWebhooksAll[notifyChannel] as string[]) || []
       : []
     const setChannelWebhooks = (next: string[]) => {
       if (!notifyChannel) return
-      onUpdate({ notify_webhooks: { ...notifyWebhooksAll, [notifyChannel]: next } })
+      updateConfigs({
+        notify_webhooks: { ...notifyWebhooksAll, [notifyChannel]: next },
+      })
     }
-    // 钉钉「加签」密钥列表（与当前渠道 webhook 下标一一对应）
+    // 钉钉「加签」密钥列表（全局共享，与当前渠道 webhook 下标一一对应）
     const channelSecrets =
-      notifyChannel === 'dingtalk' ? hosts?.notify_webhook_secrets?.['dingtalk'] || [] : []
+      notifyChannel === 'dingtalk'
+        ? ((configs?.notify_webhook_secrets?.['dingtalk'] as string[]) || [])
+        : []
     const setChannelSecrets = (next: string[]) => {
       if (notifyChannel !== 'dingtalk') return
-      onUpdate({
+      updateConfigs({
         notify_webhook_secrets: {
-          ...(hosts?.notify_webhook_secrets || {}),
+          ...(configs?.notify_webhook_secrets || {}),
           dingtalk: next,
         },
       })
