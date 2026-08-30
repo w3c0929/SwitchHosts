@@ -28,12 +28,12 @@ pub const CHANNEL_OTHER: &str = "other";
 pub const FORMAT_TEXT: &str = "text";
 pub const FORMAT_MARKDOWN: &str = "markdown";
 
-/// 占位符：{title} 方案标题；{result} 下载完成/下载失败；{message} 结果详情
+/// 占位符：{title} 方案标题；{result} 刷新成功/刷新失败；{message} 结果详情
 pub const PLACEHOLDER_TITLE: &str = "{title}";
 pub const PLACEHOLDER_RESULT: &str = "{result}";
 pub const PLACEHOLDER_MESSAGE: &str = "{message}";
 
-/// Resolve the final notification text. `result` is "下载完成"/"下载失败",
+/// Resolve the final notification text. `result` is "刷新成功"/"刷新失败",
 /// `detail` holds the failure reason (empty on success). When the user
 /// configured a `notify_message` template it is used instead, with
 /// placeholders substituted; an empty template falls back to the built-in
@@ -178,7 +178,7 @@ pub fn notify_download_outcome<R: Runtime>(
         .get("notify_format")
         .and_then(Value::as_str)
         .unwrap_or(FORMAT_TEXT);
-    let result = if success { "下载完成" } else { "下载失败" };
+    let result = if success { "刷新成功" } else { "刷新失败" };
     let resolved = resolve_notify_message(&title, template, result, detail);
     let os_line = resolve_notify_message(&title, "", result, detail);
 

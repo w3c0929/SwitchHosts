@@ -127,10 +127,29 @@ async fn refresh_one_inner<R: Runtime>(
     //  - 仅抓取/触发方案（无 save_path）：发起请求、读取响应文本写回内部
     //    entries 供右侧查看（不产生内容变更事件、不进 hosts 管线）。
     let mut content_changed = false;
-    // 下载型方案是否成功完成（成功后用 Step 4 的最新配置推送通知）
-    let mut download_success_notify = false;
+    // 刷新成功后是否推送通知（成功后用 Step 4 的最新配置推送，
+    // 防竞态——用户可能正在切换渠道或增删 webhook）。
+    let mut refresh_success_notify = false;
     if as_hosts {
-        let new_content = fetch_remote(&url, state).await?;
+        let new_content = fetch_remote(&url, state).await.map_err(|e| {
+            // hosts 型方案刷新失败时也推送通知
+            let message = match &e {
+                RefreshError::Fetch { message } => message.clone(),
+                _ => format!("{e:?}"),
+            };
+            if let Ok(fresh_manifest) = Manifest::load(&state.paths) {
+                if let Some(node) = find_node(&fresh_manifest.root, id) {
+                    crate::webhook::notify_download_outcome(
+                        app,
+                        state,
+                        &node,
+                        false,
+                        &message,
+                    );
+                }
+            }
+            e
+        })?;
 
         if let Some(save_path) = snapshot.get("save_path").and_then(Value::as_str) {
             let save_path = save_path.trim();
@@ -158,6 +177,7 @@ async fn refresh_one_inner<R: Runtime>(
                 }
             })?;
         }
+        refresh_success_notify = true;
     } else {
         // 仅抓取/下载方案：不设大小上限、不设特殊超时（沿用默认 30s）。
         //  - 配置了 save_path（下载型）：流式下载，边下边写 `<目标>.part`，
@@ -197,7 +217,7 @@ async fn refresh_one_inner<R: Runtime>(
                         // 成功：不在抓取时快照上发通知，等 Step 4 用
                         // 锁内重读的"最新"配置（updated_snapshot）再推送，
                         // 避免抓取期间用户切换渠道/改 webhook 造成竞态。
-                        download_success_notify = true;
+                        refresh_success_notify = true;
                     }
                     Err(e) => {
                         let message = match &e {
@@ -224,11 +244,30 @@ async fn refresh_one_inner<R: Runtime>(
             _ => {
                 // 触发型：读取响应文本并写回内部缓存（右侧编辑器在
                 // hosts_refreshed 时自动重新加载显示）。
-                let new_content = fetch_remote(&url, state).await?;
+                let new_content = fetch_remote(&url, state).await.map_err(|e| {
+                    let message = match &e {
+                        RefreshError::Fetch { message } => message.clone(),
+                        _ => format!("{e:?}"),
+                    };
+                    if let Ok(fresh_manifest) = Manifest::load(&state.paths) {
+                        if let Some(node) = find_node(&fresh_manifest.root, id) {
+                            crate::webhook::notify_download_outcome(
+                                app,
+                                state,
+                                &node,
+                                false,
+                                &message,
+                            );
+                        }
+                    }
+                    e
+                })?;
                 entries::write_entry(&state.paths.entries_dir, id, &new_content)
                     .map_err(|e| RefreshError::Storage {
                         message: e.to_string(),
                     })?;
+                // 触发型方案也推送成功通知
+                refresh_success_notify = true;
             }
         }
     }
@@ -267,9 +306,9 @@ async fn refresh_one_inner<R: Runtime>(
         let _ = app.emit("hosts_content_changed", json!({ "_args": [id] }));
     }
 
-    // 下载型成功通知：用 Step 4 锁内重读的最新配置推送（防竞态——
+    // 刷新成功通知：用 Step 4 锁内重读的最新配置推送（防竞态——
     // 用户可能正在切换渠道或增删 webhook）。
-    if download_success_notify {
+    if refresh_success_notify {
         crate::webhook::notify_download_outcome(app, state, &updated_snapshot, true, "");
     }
 
