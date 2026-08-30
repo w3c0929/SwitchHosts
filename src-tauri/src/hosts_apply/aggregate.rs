@@ -54,7 +54,10 @@ fn collect_selected(
         if is_on(node) {
             if let Some(id) = node.get("id").and_then(Value::as_str) {
                 let content = entries::read_entry(&paths.entries_dir, id)?;
-                out.push(content);
+                // 跳过空内容的 entries，避免 join("\n\n") 产生空行
+                if !content.is_empty() {
+                    out.push(content);
+                }
             }
         }
         if let Some(children) = node.get("children").and_then(Value::as_array) {

@@ -78,6 +78,17 @@ const List = (props: Props) => {
       configs?.choice_mode ?? 0,
       configs?.multi_chose_folder_switch_all ?? false,
     )
+
+    // 下载型/触发型方案（as_hosts=false）的内容不进入系统 hosts，
+    // 开关它们不需要重写 hosts 文件——只更新列表状态即可。
+    const item = findItemById(newList, id)
+    if (item?.as_hosts === false) {
+      await setList(newList)
+      agent.broadcast(events.set_hosts_on_status, id, on)
+      agent.broadcast(events.tray_list_updated)
+      return
+    }
+
     const success = await writeHostsToSystem(newList)
     if (success) {
       agent.broadcast(events.set_hosts_on_status, id, on)

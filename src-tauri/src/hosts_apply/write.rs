@@ -187,11 +187,12 @@ fn restore_line_endings(s: &str) -> String {
 fn make_append_content(previous_lf: &str, new_content_lf: &str) -> String {
     let head = match previous_lf.find(CONTENT_START_MARKER) {
         Some(idx) => previous_lf[..idx].trim_end().to_string(),
-        None => previous_lf.to_string(),
+        None => previous_lf.trim_end().to_string(),
     };
 
     if new_content_lf.is_empty() {
-        return format!("{head}\n");
+        // 没有启用的 hosts 内容时，不添加额外换行
+        return head;
     }
 
     format!("{head}\n\n{CONTENT_START_MARKER}\n\n{new_content_lf}")
