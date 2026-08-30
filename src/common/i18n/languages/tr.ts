@@ -16,6 +16,9 @@ export default {
   as_hosts: 'Hosts içeriği olarak uygula',
   as_hosts_desc:
     'Açıkken, alınan içerik hosts içeriği olarak kullanılır (sistem hosts dosyasına yazılabilir). Kapatıldığında yalnızca zamanlanmış çekme/ tetikleme içindir — içerik hosts hattının dışında kalır ve «Yerel Kayıt Konumu» ile kaydedilebilir.',
+  show_content: 'Sağ içeriği göster',
+  show_content_desc:
+    'Açıkken, bu öğeyi seçmek içeriğini sağdaki ana düzenleyicide gösterir. Kapatıldığında içerik gizlenir — öğe listede kalır ancak düzenleyici boş kalır. Varsayılan olarak açıktır.',
   auto_check_update: 'Güncellemeleri otomatik kontrol et',
   auto_check_update_desc:
     'Etkinleştirildiğinde SwitchHosts yeni bir sürüm olduğunda sizi bilgilendirir; güncellemeleri otomatik olarak indirmez veya yüklemez.',

@@ -28,6 +28,8 @@ const HostsEditor = () => {
   const { currentHosts, isReadOnly } = useHostsData()
   const hostsId = currentHosts?.id || '0'
   const readOnly = isReadOnly(currentHosts)
+  // 控制右侧编辑器是否显示内容（默认开；用户可在编辑表单中关闭）
+  const showContent = currentHosts?.show_content !== false
   const [content, setContent] = useState('')
 
   const refMount = useRef<HTMLDivElement>(null)
@@ -38,6 +40,7 @@ const HostsEditor = () => {
   // (which are created once on mount) can always read the latest values.
   const refHostsId = useRef(hostsId)
   const refReadOnly = useRef(readOnly)
+  const refShowContent = useRef(showContent)
   // Pending find: when a show_source event arrives before the target hosts is loaded
   // (List broadcasts select_hosts then show_source synchronously, but hostsId only
   // updates on the next render), we stash the params here and apply them once
@@ -71,6 +74,10 @@ const HostsEditor = () => {
   useEffect(() => {
     refReadOnly.current = readOnly
   }, [readOnly])
+
+  useEffect(() => {
+    refShowContent.current = showContent
+  }, [showContent])
 
   const { run: toSave } = useDebounceFn(
     (id: string, nextContent: string) => {
@@ -188,6 +195,14 @@ const HostsEditor = () => {
 
   /** Fetch hosts content and replace the editor state (clears undo history). */
   const loadContent = async (targetHostsId = hostsId) => {
+    // show_content 关闭时，编辑器清空不加载内容
+    if (targetHostsId !== '0' && !refShowContent.current) {
+      setContent('')
+      const view = createEditorView('')
+      if (view) refreshEditorLayout(view)
+      return
+    }
+
     const nextContent = normalizeLineEndings(
       targetHostsId === '0'
         ? await actions.getSystemHosts()
@@ -223,11 +238,11 @@ const HostsEditor = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Load content when the active hosts changes.
+  // Load content when the active hosts changes or show_content toggles.
   useEffect(() => {
     loadContent(hostsId).catch((e) => console.error(e))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hostsId])
+  }, [hostsId, showContent])
 
   // Reconfigure read-only state via the compartment without rebuilding the editor.
   useEffect(() => {

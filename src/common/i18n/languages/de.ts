@@ -18,6 +18,9 @@ const lang: LanguageDict = {
   as_hosts: 'Als Hosts-Inhalt anwenden',
   as_hosts_desc:
     'Wenn aktiviert, wird der abgerufene Inhalt als Hosts verwendet (in die System-Hosts schreibbar). Deaktivieren Sie es für reines geplantes Abrufen/Triggern — der Inhalt bleibt außerhalb der Hosts-Pipeline und kann über „Lokaler Speicherpfad" gespeichert werden.',
+  show_content: 'Rechte Inhalte anzeigen',
+  show_content_desc:
+    'Wenn aktiviert, wird beim Auswählen dieses Eintrags sein Inhalt im Haupteditor rechts angezeigt. Deaktivieren, um den Inhalt auszublenden — der Eintrag bleibt in der Liste, aber der Editor bleibt leer. Standardmäßig aktiviert.',
   auto_check_update: 'Automatisch nach Updates suchen',
   auto_check_update_desc:
     'Wenn aktiviert, zeigt SwitchHosts einen Hinweis an, sobald eine neue Version verfügbar ist. Updates werden nicht automatisch heruntergeladen oder installiert.',

@@ -18,6 +18,9 @@ const lang: LanguageDict = {
   as_hosts: 'Appliquer en tant que contenu hosts',
   as_hosts_desc:
     'Activé : le contenu récupéré est utilisé comme contenu hosts (écrivable dans les hosts système). Désactivé : uniquement pour la récupération/le déclenchement planifiés — le contenu reste hors du pipeline hosts, éventuellement enregistré via « Chemin de sauvegarde local ».',
+  show_content: 'Afficher le contenu de droite',
+  show_content_desc:
+    "Activé : sélectionner cet élément affiche son contenu dans l'éditeur principal à droite. Désactivé : le contenu est masqué — l'élément reste dans la liste mais l'éditeur reste vide. Activé par défaut.",
   auto_check_update: 'Vérifier automatiquement les mises à jour',
   auto_check_update_desc:
     'Si activé, SwitchHosts vous avertit lorsqu’une nouvelle version est disponible, sans télécharger ni installer les mises à jour automatiquement.',

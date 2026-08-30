@@ -16,6 +16,9 @@ export default {
   as_hosts: 'Stosuj jako treść hosts',
   as_hosts_desc:
     'Włączone: pobrana treść jest używana jako hosts (zapisywalna do systemowych hosts). Wyłącz dla samego okresowego pobierania/wyzwalania — treść pozostaje poza pipeline hosts i można ją zapisać przez „Lokalna ścieżka zapisu".',
+  show_content: 'Pokaż treść po prawej',
+  show_content_desc:
+    'Włączone: wybranie tego elementu pokazuje jego treść w głównym edytorze po prawej. Wyłącz, aby ukryć treść — element pozostaje na liście, ale edytor pozostaje pusty. Domyślnie włączone.',
   auto_check_update: 'Automatycznie sprawdzaj aktualizacje',
   auto_check_update_desc:
     'Po włączeniu SwitchHosts powiadomi Cię, gdy będzie dostępna nowa wersja, ale nie pobierze ani nie zainstaluje aktualizacji automatycznie.',

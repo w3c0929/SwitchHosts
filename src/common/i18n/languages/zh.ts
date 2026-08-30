@@ -18,6 +18,9 @@ const lang: LanguageDict = {
   as_hosts: '作为 Hosts 内容应用',
   as_hosts_desc:
     '开启时，抓取到的内容作为 hosts 使用（可写入系统 hosts）；关闭时仅用于定时抓取/触发，内容不会进入 hosts，可配合「本地保存路径」保存文件。',
+  show_content: '显示右侧内容',
+  show_content_desc:
+    '开启时，选中该方案后右侧主编辑器区域显示其内容；关闭时右侧编辑器不显示内容，仅作为列表中的一个条目存在。默认开启。',
   auto_check_update: '自动检查更新',
   auto_check_update_desc: '开启后，SwitchHosts 会在有新版本时提醒你，不会自动下载或安装更新。',
   auto_refresh: '自动刷新',

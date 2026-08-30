@@ -332,6 +332,16 @@ const EditHostsInfo = () => {
         </Box>
 
         <Box className={styles.ln}>
+          <Text mb="8px">{lang.show_content}</Text>
+          <Switch
+            aria-label={lang.show_content}
+            checked={hosts?.show_content !== false}
+            onChange={(e) => onUpdate({ show_content: e.currentTarget.checked })}
+          />
+          <DescriptionText mt="8px">{lang.show_content_desc}</DescriptionText>
+        </Box>
+
+        <Box className={styles.ln}>
           <Text mb="8px">{lang.save_path}</Text>
           <Group gap="8px" align="flex-start" wrap="wrap">
             <TextInput

@@ -16,6 +16,9 @@ export default {
   as_hosts: 'Apply As Hosts Content',
   as_hosts_desc:
     'When on, the fetched content is used as hosts content (applied into the system hosts). Turn it off for scheduled fetching or triggering only — the content stays outside the hosts pipeline and can be saved via "Local Save Path".',
+  show_content: 'Show Right-Side Content',
+  show_content_desc:
+    'When on, selecting this item shows its content in the main editor on the right. Turn it off to hide the content — the item remains in the list but the editor stays empty. On by default.',
   auto_check_update: 'Automatically Check for Updates',
   auto_check_update_desc:
     'When enabled, SwitchHosts will remind you when a new version is available and will not download or install updates automatically.',

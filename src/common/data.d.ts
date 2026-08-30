@@ -18,6 +18,8 @@ export interface IHostsListObject {
   save_path?: string
   // 内容用途：false = 仅定时抓取/触发（不写入 hosts）；缺省/true = 作为 hosts 内容
   as_hosts?: boolean
+  // 是否在右侧主编辑器区域显示内容：缺省/true = 显示；false = 隐藏
+  show_content?: boolean
   // 下载型方案的通知：当前渠道（wecom 企业微信 / dingtalk 钉钉 / other 其他）
 // 与【按渠道各自独立】的 webhook 列表；切换渠道不影响其他渠道的配置
 notify_channel?: string
