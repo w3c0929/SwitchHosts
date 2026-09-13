@@ -268,7 +268,7 @@ export default {
   url_pick_file: 'Yerel Dosya Seç',
   url_placeholder: 'http:// veya https:// veya file://',
   url_script_desc:
-    'Bu URL yerel bir PowerShell betiğine (.ps1) işaret eder: tetikleyici türünde çalışır — yenileme betiği otomatik olarak çalıştırır ve sonuç sağdaki düzenleyicide gösterilir. İçerik sistem hosts dosyasına asla girmez.',
+    'Bu URL yerel bir PowerShell betiğine (.ps1) işaret eder: tetikleyici türünde çalışır — yenileme betiği otomatik olarak çalıştırır ve sonuç sağdaki düzenleyicide gösterilir. İçerik sistem hosts dosyasına asla girmez. Betiğin ürettiği dosyalar varsayılan olarak betiğin yanına yazılır; aşağıdaki "Yerel Kayıt Yolu" ile farklı bir çıktı klasörü seçebilirsiniz.',
   usage_data_agree: 'Evet, anonimleştirilmiş kullanım verilerini gönder',
   usage_data_help:
     "Anonim kullanım verilerini periyodik olarak göndererek SwitchHosts'u iyileştirmemize yardımcı olmak ister misiniz?",

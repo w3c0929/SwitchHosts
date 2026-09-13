@@ -272,7 +272,7 @@ const lang: LanguageDict = {
   url_pick_file: 'Lokale Datei auswählen',
   url_placeholder: 'http:// oder https:// oder file://',
   url_script_desc:
-    'Diese URL verweist auf ein lokales PowerShell-Skript (.ps1): Es wird als Trigger-Schema ausgeführt — beim Aktualisieren wird das Skript automatisch ausgeführt und das Ergebnis im rechten Editor angezeigt. Der Inhalt gelangt nie in die System-hosts.',
+    'Diese URL verweist auf ein lokales PowerShell-Skript (.ps1): Es wird als Trigger-Schema ausgeführt — beim Aktualisieren wird das Skript automatisch ausgeführt und das Ergebnis im rechten Editor angezeigt. Der Inhalt gelangt nie in die System-hosts. Vom Skript erzeugte Dateien werden standardmäßig neben dem Skript abgelegt; über "Lokalen Speicherpfad" unten kann ein anderer Ausgabeordner gewählt werden.',
   usage_data_agree: 'Ja, übermitteln Sie anonymisierte Nutzungsdaten',
   usage_data_help:
     'Möchten Sie uns helfen, SwitchHosts zu verbessern, indem Sie regelmäßig anonyme Nutzungsdaten übermitteln?',

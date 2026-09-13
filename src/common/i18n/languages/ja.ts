@@ -266,7 +266,7 @@ const lang: LanguageDict = {
   url_pick_file: 'ローカルファイルを選択',
   url_placeholder: 'http:// または https:// または file://',
   url_script_desc:
-    'この URL はローカルの PowerShell スクリプト（.ps1）を指しています。トリガー型スキームとして動作し、更新時にスクリプトが自動実行され、結果が右側エディタに表示されます。内容がシステム hosts に入ることはありません。',
+    'この URL はローカルの PowerShell スクリプト（.ps1）を指しています。トリガー型スキームとして動作し、更新時にスクリプトが自動実行され、結果が右側エディタに表示されます。内容がシステム hosts に入ることはありません。スクリプトが生成するファイルは既定でスクリプトと同じフォルダーに出力され、下の「ローカル保存先」で出力先フォルダーを変更できます。',
   usage_data_agree: 'はい、匿名の利用データを送信します。',
   usage_data_help: '匿名の利用データを定期的に送信し、SwitchHostsの改善にご協力いただけませんか？',
   usage_data_title: 'SwitchHostsの改善に協力する',

@@ -53,6 +53,8 @@ axum = { version = "0.8", default-features = false, features = ["http1", "tokio"
 hmac = "0.12"
 sha2 = "0.10"
 base64 = "0.22"
+# 脚本输出解码：中文 Windows 的 PowerShell 5.1 可能以 GBK 输出，需转 UTF-8
+encoding_rs = "0.8"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 libc = "0.2"

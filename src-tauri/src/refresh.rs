@@ -141,19 +141,26 @@ async fn refresh_one_inner<R: Runtime>(
     // entries），但按失败推送通知并附退出码说明。
     let mut script_failure_detail: Option<String> = None;
     if let Some(script_path) = script_trigger::script_path_from_url(&url) {
-        match run_script_trigger(&script_path).await {
+        // 产物输出目录：配置了「本地保存路径」（且未被 save_path_enabled
+        // 关闭）时以该目录作为脚本的工作目录，脚本生成的相对路径文件落在
+        // 那里；否则默认落在脚本自身所在目录。save_path 对脚本方案不再
+        // 作为「运行日志镜像文件」使用。
+        let output_dir = {
+            let enabled = snapshot.get("save_path_enabled").and_then(Value::as_bool) != Some(false);
+            if enabled {
+                snapshot
+                    .get("save_path")
+                    .and_then(Value::as_str)
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())
+                    .map(PathBuf::from)
+            } else {
+                None
+            }
+        };
+        match run_script_trigger(&script_path, output_dir.as_deref()).await {
             Ok(run) => {
                 let new_content = entries::normalize_to_lf(&format_script_run_output(&url, &run));
-                if let Some(save_path) = snapshot.get("save_path").and_then(Value::as_str) {
-                    let save_path = save_path.trim();
-                    if !save_path.is_empty() {
-                        if let Err(message) = write_save_copy(save_path, &new_content) {
-                            log::warn!(
-                                "remote {id}: failed to mirror script output to save_path: {message}"
-                            );
-                        }
-                    }
-                }
                 // 与内部 entries 比对后写回（避免每次刷新都触发磁盘写入）。
                 let old_content = entries::read_entry(&state.paths.entries_dir, id)
                     .map_err(|e| RefreshError::Storage {
@@ -787,12 +794,17 @@ struct ScriptRun {
 /// Execute a local `.ps1` file as a trigger-type run: PowerShell runs
 /// the script with stdin closed, stdout/stderr captured, launched
 /// hidden (no console window flash) and killed on timeout / drop.
-async fn run_script_trigger(path: &Path) -> Result<ScriptRun, String> {
+///
+/// `work_dir` selects the process working directory — the directory
+/// where relative-path files the script generates (its "产物") land.
+/// `None` (or an unusable value) falls back to the script's own folder.
+async fn run_script_trigger(path: &Path, work_dir: Option<&Path>) -> Result<ScriptRun, String> {
     if !path.exists() {
         return Err(format!("script not found: {}", path.display()));
     }
+    let cwd = resolve_script_work_dir(path, work_dir);
     let now = std::time::Instant::now();
-    let child = spawn_script(path).map_err(|e| {
+    let child = spawn_script(path, &cwd).map_err(|e| {
         format!(
             "failed to start PowerShell for {}: {e}",
             path.display()
@@ -822,35 +834,82 @@ async fn run_script_trigger(path: &Path) -> Result<ScriptRun, String> {
     }
 }
 
+/// Pick the script's working directory. User-specified `work_dir` wins
+/// (created on demand); when it is missing / not a directory / empty,
+/// fall back to the script's own parent directory so generated files
+/// land next to the `.ps1` itself.
+fn resolve_script_work_dir(path: &Path, work_dir: Option<&Path>) -> PathBuf {
+    if let Some(dir) = work_dir {
+        if !dir.as_os_str().is_empty() {
+            if dir.exists() && !dir.is_dir() {
+                log::warn!(
+                    "script work dir {} is not a directory; falling back to script folder",
+                    dir.display()
+                );
+            } else {
+                if let Err(e) = std::fs::create_dir_all(dir) {
+                    log::warn!("failed to create script work dir {}: {e}", dir.display());
+                }
+                return dir.to_path_buf();
+            }
+        }
+    }
+    path.parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| PathBuf::from("."))
+}
+
+/// Decode script output bytes into UTF-8 text. PowerShell 5.x on
+/// non-UTF-8 locales writes OEM-codepage bytes (GBK on zh-CN) unless
+/// forced to UTF-8 — try strict UTF-8 first, then decode as GBK
+/// (covers CP936 / GB18030), and finally fall back to lossy UTF-8 so a
+/// garbled stream never panics or returns an error.
+fn decode_script_bytes(bytes: &[u8]) -> String {
+    if let Ok(text) = std::str::from_utf8(bytes) {
+        return text.to_string();
+    }
+    let (text, _, had_errors) = encoding_rs::GBK.decode(bytes);
+    if !had_errors {
+        return text.into_owned();
+    }
+    String::from_utf8_lossy(bytes).into_owned()
+}
+
+/// Cap the decoded output to `SCRIPT_OUTPUT_CAP` characters (by char
+/// count, so multi-byte CJK text is never split mid-character) with a
+/// truncation marker.
 fn truncate_output(bytes: &[u8]) -> String {
-    let text = String::from_utf8_lossy(bytes).into_owned();
-    if text.len() <= SCRIPT_OUTPUT_CAP {
+    let text = decode_script_bytes(bytes);
+    if text.chars().count() <= SCRIPT_OUTPUT_CAP {
         return text;
     }
-    // `String::truncate` panics if the index is not a char boundary —
-    // walk back to the nearest safe boundary before cutting.
-    let mut end = SCRIPT_OUTPUT_CAP;
-    while end > 0 && !text.is_char_boundary(end) {
-        end -= 1;
-    }
-    let mut cut = text;
-    cut.truncate(end);
-    cut.push_str("\n… [output truncated]");
-    cut
+    let cut: String = text.chars().take(SCRIPT_OUTPUT_CAP).collect();
+    format!("{cut}\n… [output truncated]")
 }
 
 /// Launch the script with the platform's PowerShell. Windows uses the
 /// inbox `powershell.exe` (ExecutionPolicy Bypass so user scripts run
-/// without elevation); elsewhere `pwsh` must be on PATH.
+/// without elevation) wrapped in a `-Command` that forces UTF-8 output
+/// and preserves the script's exit code; elsewhere `pwsh` (UTF-8 by
+/// default) must be on PATH. Both run with `cwd` as working directory.
 #[cfg(target_os = "windows")]
-fn spawn_script(path: &Path) -> std::io::Result<tokio::process::Child> {
+fn spawn_script(path: &Path, cwd: &Path) -> std::io::Result<tokio::process::Child> {
     const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    // 强制 UTF-8 输出，避免中文 Windows 上 PS 5.1 以 GBK 写管道导致乱码；
+    // `exit $LASTEXITCODE` 保持脚本退出码（-Command 单独跑退出码会变 1）。
+    // 路径用单引号包裹，内嵌单引号翻倍转义。
+    let escaped = path.to_string_lossy().replace('\'', "''");
+    let command = format!(
+        "[Console]::OutputEncoding=[Text.Encoding]::UTF8; & '{escaped}'; exit $LASTEXITCODE"
+    );
     TokioCommand::new("powershell.exe")
         .arg("-NoProfile")
         .arg("-ExecutionPolicy")
         .arg("Bypass")
-        .arg("-File")
-        .arg(path)
+        .arg("-Command")
+        .arg(command)
+        .current_dir(cwd)
         .creation_flags(CREATE_NO_WINDOW)
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::piped())
@@ -860,11 +919,12 @@ fn spawn_script(path: &Path) -> std::io::Result<tokio::process::Child> {
 }
 
 #[cfg(not(target_os = "windows"))]
-fn spawn_script(path: &Path) -> std::io::Result<tokio::process::Child> {
+fn spawn_script(path: &Path, cwd: &Path) -> std::io::Result<tokio::process::Child> {
     TokioCommand::new("pwsh")
         .arg("-NoProfile")
         .arg("-File")
         .arg(path)
+        .current_dir(cwd)
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
@@ -1548,8 +1608,8 @@ mod tests {
     #[test]
     fn run_script_trigger_executes_real_ps1() {
         use crate::script_trigger::script_path_from_url;
-        // 端到端验证：真实 powershell.exe 执行，确认 -File 参数、
-        // ExecutionPolicy Bypass 与输出捕获链路可用。
+        // 端到端验证：真实 powershell.exe 经 UTF-8 包装执行 GBK 编码脚本，
+        // 确认中文输出不再乱码、退出码保留、relative 产物文件落在脚本目录。
         let root = std::env::temp_dir().join(format!(
             "swh-script-run-test-{}-{}",
             std::process::id(),
@@ -1560,23 +1620,52 @@ mod tests {
         ));
         std::fs::create_dir_all(&root).unwrap();
         let script = root.join("hello.ps1");
-        std::fs::write(&script, "Write-Output 'hello ps1 trigger'; exit 0").unwrap();
+        // 脚本按 GBK 字节写入（模拟中文 Windows 上的真实 .ps1）：
+        //   Write-Output '智能模式已开启'; Set-Content -LiteralPath '产物.txt' -Value 'done' -Encoding UTF8; exit 0
+        let mut gbk: Vec<u8> = b"Write-Output '".to_vec();
+        gbk.extend_from_slice(&[0xD6, 0xC7, 0xC4, 0xDC, 0xC4, 0xA3, 0xCA, 0xBD, 0xD2, 0xD1, 0xBF, 0xAA, 0xC6, 0xF4]); // 智能模式已开启
+        gbk.extend_from_slice(b"'; Set-Content -LiteralPath '");
+        gbk.extend_from_slice(&[0xB2, 0xFA, 0xCE, 0xEF]); // 产物
+        gbk.extend_from_slice(b".txt' -Value 'done' -Encoding UTF8; exit 0");
+        std::fs::write(&script, &gbk).unwrap();
 
         let path = script_path_from_url(&format!("file:///{}", script.to_string_lossy()))
             .expect("script url");
-        let result = tokio::runtime::Runtime::new()
+        let run = tokio::runtime::Runtime::new()
             .unwrap()
             .block_on(async {
-                tokio::time::timeout(Duration::from_secs(30), run_script_trigger(&path))
+                tokio::time::timeout(Duration::from_secs(30), run_script_trigger(&path, None))
                     .await
                     .expect("run must not hang")
-            });
-        let run = result.expect("run ok");
+            })
+            .expect("run ok");
         assert!(run.success, "exit code {}", run.exit_code);
+        // 中文输出必须正确解码（UTF-8 包装 + 解码链路）
         assert!(
-            run.stdout.contains("hello ps1 trigger"),
-            "stdout: {}",
+            run.stdout.contains("智能模式已开启"),
+            "stdout must decode Chinese correctly, got: {}",
             run.stdout
+        );
+        // 默认工作目录 = 脚本目录 → 产物文件落在脚本旁
+        assert!(
+            root.join("产物.txt").exists(),
+            "artifact must land next to the script by default"
+        );
+
+        // 指定输出目录 → 产物落在那里
+        let out_dir = root.join("out");
+        let run2 = tokio::runtime::Runtime::new()
+            .unwrap()
+            .block_on(async {
+                tokio::time::timeout(Duration::from_secs(30), run_script_trigger(&path, Some(&out_dir)))
+                    .await
+                    .expect("run must not hang")
+            })
+            .expect("run2 ok");
+        assert!(run2.success);
+        assert!(
+            out_dir.join("产物.txt").exists(),
+            "artifact must land in the configured work dir"
         );
 
         std::fs::remove_dir_all(root).ok();
@@ -1588,10 +1677,57 @@ mod tests {
         let missing = Path::new("Z:\\definitely\\missing\\nope.ps1");
         let result = tokio::runtime::Runtime::new()
             .unwrap()
-            .block_on(run_script_trigger(missing));
+            .block_on(run_script_trigger(missing, None));
         match result {
             Err(err) => assert!(err.contains("script not found"), "{err}"),
             Ok(_) => panic!("missing script must error"),
         }
+    }
+
+    #[test]
+    fn decode_script_bytes_passes_utf8_through() {
+        assert_eq!(
+            decode_script_bytes("智能模式已开启".as_bytes()),
+            "智能模式已开启"
+        );
+        assert_eq!(decode_script_bytes(b"plain ascii"), "plain ascii");
+    }
+
+    #[test]
+    fn decode_script_bytes_falls_back_to_gbk() {
+        // 智能模式已开启 的 GBK(CP936) 编码
+        let gbk = [
+            0xD6, 0xC7, 0xC4, 0xDC, 0xC4, 0xA3, 0xCA, 0xBD, 0xD2, 0xD1, 0xBF, 0xAA, 0xC6, 0xF4,
+        ];
+        assert_eq!(decode_script_bytes(&gbk), "智能模式已开启");
+    }
+
+    #[test]
+    fn resolve_script_work_dir_prefers_explicit_dir_and_creates_it() {
+        let root = std::env::temp_dir().join(format!(
+            "swh-workdir-test-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let script_dir = root.join("script");
+        std::fs::create_dir_all(&script_dir).unwrap();
+        let script = script_dir.join("run.ps1");
+
+        // 未指定 → 脚本所在目录
+        assert_eq!(resolve_script_work_dir(&script, None), script_dir);
+        // 指定目录 → 使用并自动创建
+        let out = root.join("out");
+        assert_eq!(resolve_script_work_dir(&script, Some(&out)), out);
+        assert!(out.exists(), "explicit work dir must be created");
+        // 指定路径是文件 → 退回脚本目录
+        let blocker = root.join("blocker");
+        std::fs::write(&blocker, "i am a file").unwrap();
+        assert_eq!(resolve_script_work_dir(&script, Some(&blocker)), script_dir);
+
+        std::fs::remove_dir_all(root).ok();
     }
 }
