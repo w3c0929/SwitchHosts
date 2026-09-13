@@ -246,7 +246,10 @@ const lang: LanguageDict = {
   update_error_unavailable: '目前無法取得更新資訊，請稍後再試。',
   update_install_now: '重新啟動以完成更新',
   update_ready_desc: '版本 {0} 已安裝，重新啟動後生效。',
+  url_pick_file: '瀏覽本機檔案',
   url_placeholder: 'http:// 或 https:// 或 file://',
+  url_script_desc:
+    '該 URL 指向本機 PowerShell 腳本（.ps1），將以觸發型方案執行：重新整理時自動執行該指令碼，執行結果在右側編輯器顯示，內容不會進入系統 hosts。',
   usage_data_agree: '好的，寄送匿名的使用資料',
   usage_data_help:
     '您願意寄送匿名的使用資料來幫助我們改善 SwitchHosts 嗎？資料中不會包含任何隱私資訊。',

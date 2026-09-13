@@ -263,7 +263,10 @@ const lang: LanguageDict = {
     '現在アップデート情報を取得できません。しばらくしてからもう一度お試しください。',
   update_install_now: '再起動して更新を完了',
   update_ready_desc: 'バージョン {0} はインストール済みです。再起動後に有効になります。',
+  url_pick_file: 'ローカルファイルを選択',
   url_placeholder: 'http:// または https:// または file://',
+  url_script_desc:
+    'この URL はローカルの PowerShell スクリプト（.ps1）を指しています。トリガー型スキームとして動作し、更新時にスクリプトが自動実行され、結果が右側エディタに表示されます。内容がシステム hosts に入ることはありません。',
   usage_data_agree: 'はい、匿名の利用データを送信します。',
   usage_data_help: '匿名の利用データを定期的に送信し、SwitchHostsの改善にご協力いただけませんか？',
   usage_data_title: 'SwitchHostsの改善に協力する',

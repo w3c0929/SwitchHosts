@@ -13,6 +13,7 @@ mod import_export;
 mod lifecycle;
 mod migration;
 mod refresh;
+mod script_trigger;
 mod storage;
 mod tray;
 mod webhook;
@@ -513,6 +514,7 @@ pub fn run() {
             commands::refresh_remote_hosts,
             commands::refresh_all_remote_hosts,
             commands::pick_save_path,
+            commands::pick_file_path,
             commands::get_apply_history,
             commands::delete_apply_history_item,
             commands::delete_apply_history_items,

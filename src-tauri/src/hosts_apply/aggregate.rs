@@ -73,6 +73,14 @@ fn is_on(node: &Value) -> bool {
     if node.get("as_hosts").and_then(Value::as_bool) == Some(false) {
         return false;
     }
+    // 脚本触发方案（file:// 指向本机 .ps1）同样永不进入系统 hosts：
+    // 它的运行输出不是 hosts 内容。即使 as_hosts 缺省/为 true（旧配置或
+    // 手动编辑 manifest），也在此拦截，与 refresh 侧的触发型语义一致。
+    if let Some(url) = node.get("url").and_then(Value::as_str) {
+        if crate::script_trigger::is_script_trigger_url(url) {
+            return false;
+        }
+    }
     node.get("on").and_then(Value::as_bool).unwrap_or(false)
 }
 

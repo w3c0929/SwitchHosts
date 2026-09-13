@@ -267,7 +267,10 @@ export default {
     'Informacje o aktualizacji są teraz niedostępne. Spróbuj ponownie później.',
   update_install_now: 'Uruchom ponownie, aby ukończyć aktualizację',
   update_ready_desc: 'Wersja {0} została zainstalowana i zacznie działać po ponownym uruchomieniu.',
+  url_pick_file: 'Wybierz plik lokalny',
   url_placeholder: 'http:// lub https:// lub file://',
+  url_script_desc:
+    'Ten adres URL wskazuje lokalny skrypt PowerShell (.ps1): działa jako schemat wyzwalany — odświeżenie automatycznie uruchamia skrypt, a wynik jest wyświetlany w edytorze po prawej. Treść nigdy nie trafia do systemowych hosts.',
   usage_data_agree: 'Tak, prześlij anonimowe dane użytkowania',
   usage_data_help:
     'Czy chcesz nam pomóc ulepszyć SwitchHosts, okresowo przesyłając anonimowe dane użytkowania?',

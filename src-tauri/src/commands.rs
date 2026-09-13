@@ -849,6 +849,26 @@ pub async fn pick_save_path<R: Runtime>(app: AppHandle<R>, args: Args) -> Value 
     }
 }
 
+/// Open a native "open file" dialog and return the chosen path, or
+/// null when cancelled. Used by the remote-hosts editor to pick a
+/// local file for a `file://` URL (e.g. a `.ps1` script-trigger).
+#[tauri::command]
+pub async fn pick_file_path<R: Runtime>(app: AppHandle<R>, _args: Args) -> Value {
+    let picked = app
+        .dialog()
+        .file()
+        .add_filter("PowerShell 脚本", &["ps1"])
+        .add_filter("All files", &["*"])
+        .blocking_pick_file();
+    match picked {
+        Some(p) => match p.into_path() {
+            Ok(path) => Value::String(path.display().to_string()),
+            Err(_) => Value::Null,
+        },
+        None => Value::Null,
+    }
+}
+
 #[tauri::command]
 pub async fn refresh_remote_hosts<R: Runtime>(
     app: AppHandle<R>,

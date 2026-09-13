@@ -269,7 +269,10 @@ const lang: LanguageDict = {
     'Les informations de mise à jour ne sont pas disponibles pour le moment. Réessayez plus tard.',
   update_install_now: 'Redémarrer pour terminer la mise à jour',
   update_ready_desc: 'La version {0} a été installée et prendra effet après redémarrage.',
+  url_pick_file: 'Parcourir un fichier local',
   url_placeholder: 'http:// ou https:// ou file://',
+  url_script_desc:
+    'Cette URL pointe vers un script PowerShell local (.ps1) : il s\'exécute en mode déclencheur — l\'actualisation exécute automatiquement le script et le résultat s\'affiche dans l\'éditeur de droite. Le contenu n\'entre jamais dans le hosts système.',
   usage_data_agree: "Oui, soumettre de manière anonyme mes données d'utilisation",
   usage_data_help:
     "Voulez-vous nous aider à améliorer SwitchHosts en soumettant périodiquement vos données d'utilisation de manière anonyme ?",

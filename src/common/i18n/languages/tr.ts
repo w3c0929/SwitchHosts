@@ -265,7 +265,10 @@ export default {
     'Güncelleme bilgisi şu anda kullanılamıyor. Lütfen daha sonra tekrar deneyin.',
   update_install_now: 'Güncellemeyi tamamlamak için yeniden başlat',
   update_ready_desc: '{0} sürümü yüklendi ve yeniden başlatma sonrasında etkili olacak.',
+  url_pick_file: 'Yerel Dosya Seç',
   url_placeholder: 'http:// veya https:// veya file://',
+  url_script_desc:
+    'Bu URL yerel bir PowerShell betiğine (.ps1) işaret eder: tetikleyici türünde çalışır — yenileme betiği otomatik olarak çalıştırır ve sonuç sağdaki düzenleyicide gösterilir. İçerik sistem hosts dosyasına asla girmez.',
   usage_data_agree: 'Evet, anonimleştirilmiş kullanım verilerini gönder',
   usage_data_help:
     "Anonim kullanım verilerini periyodik olarak göndererek SwitchHosts'u iyileştirmemize yardımcı olmak ister misiniz?",

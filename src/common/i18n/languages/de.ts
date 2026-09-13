@@ -269,7 +269,10 @@ const lang: LanguageDict = {
     'Update-Informationen sind derzeit nicht verfügbar. Bitte versuchen Sie es später erneut.',
   update_install_now: 'Neu starten, um das Update abzuschließen',
   update_ready_desc: 'Version {0} wurde installiert und wird nach einem Neustart wirksam.',
+  url_pick_file: 'Lokale Datei auswählen',
   url_placeholder: 'http:// oder https:// oder file://',
+  url_script_desc:
+    'Diese URL verweist auf ein lokales PowerShell-Skript (.ps1): Es wird als Trigger-Schema ausgeführt — beim Aktualisieren wird das Skript automatisch ausgeführt und das Ergebnis im rechten Editor angezeigt. Der Inhalt gelangt nie in die System-hosts.',
   usage_data_agree: 'Ja, übermitteln Sie anonymisierte Nutzungsdaten',
   usage_data_help:
     'Möchten Sie uns helfen, SwitchHosts zu verbessern, indem Sie regelmäßig anonyme Nutzungsdaten übermitteln?',

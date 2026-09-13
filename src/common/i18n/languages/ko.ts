@@ -256,7 +256,10 @@ export default {
   update_error_unavailable: '현재 업데이트 정보를 가져올 수 없습니다. 나중에 다시 시도하세요.',
   update_install_now: '다시 시작해 업데이트 완료',
   update_ready_desc: '버전 {0}이 설치되었으며 다시 시작한 후 적용됩니다.',
+  url_pick_file: '로컬 파일 선택',
   url_placeholder: 'http:// 또는 https:// 또는 file://',
+  url_script_desc:
+    '이 URL은 로컬 PowerShell 스크립트(.ps1)를 가리킵니다. 트리거형 스킴으로 동작하여 새로고침 시 스크립트가 자동 실행되고 결과가 오른쪽 편집기에 표시됩니다. 내용이 시스템 hosts에 들어가지 않습니다.',
   usage_data_agree: '익명화된 사용 데이터 제출에 동의합니다',
   usage_data_help:
     '주기적으로 익명의 사용 데이터를 제출하여 SwitchHost를 개선하는 데 도움을 주시겠습니까?',

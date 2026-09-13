@@ -265,7 +265,10 @@ export default {
     'Update information is not available right now. Please try again later.',
   update_install_now: 'Restart to Complete Update',
   update_ready_desc: 'Version {0} has been installed and will take effect after restart.',
+  url_pick_file: 'Browse Local File',
   url_placeholder: 'http:// or https:// or file://',
+  url_script_desc:
+    'This URL points to a local PowerShell script (.ps1): it runs as a trigger-type scheme — refreshing executes the script automatically and the result is shown in the right-hand editor. The content never enters the system hosts.',
   usage_data_agree: 'Yes, Submit Anonymized Usage Data',
   usage_data_help:
     'Would you like to help us improve SwitchHosts by periodically submitting anonymous usage data?',

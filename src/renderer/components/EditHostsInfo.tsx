@@ -73,6 +73,18 @@ const defaultNameFromUrl = (url?: string): string => {
   }
 }
 
+// 是否为脚本触发型 URL：file:// 指向本机 .ps1（大小写不敏感）。
+// 这类方案刷新时执行脚本（触发型运行），而非读取内容作为 hosts。
+const isScriptTriggerUrl = (url?: string): boolean => {
+  const u = (url || '').trim()
+  return u.toLowerCase().startsWith('file://') && /\.ps1$/i.test(u)
+}
+
+// 把本地路径转成 file:// URL：Windows `C:\x\y.ps1` →
+// `file:///C:/x/y.ps1`；POSIX `/x/y.ps1` → `file:///x/y.ps1`。
+const toFileUrl = (path: string): string =>
+  'file://' + (path.startsWith('/') ? path : '/' + path.replace(/\\/g, '/'))
+
 const EditHostsInfo = () => {
   const { lang } = useI18n()
   const [hosts, setHosts] = useState<IHostsListObject | null>(null)
@@ -93,6 +105,12 @@ const EditHostsInfo = () => {
 
   const onSave = async () => {
     const data: Omit<IHostsListObject, 'id'> & { id?: string } = { ...hosts }
+
+    // 脚本触发型 URL（file:// + .ps1）：强制 as_hosts=false（触发型），
+    // 与 onUpdate 的强制逻辑一致，兜底已存在的历史方案。
+    if (isScriptTriggerUrl(data.url) && data.type === 'remote') {
+      data.as_hosts = false
+    }
 
     const keysToTrim = ['title', 'url']
     keysToTrim.map((k) => {
@@ -132,6 +150,11 @@ const EditHostsInfo = () => {
 
   const onUpdate = (kv: Partial<IHostsListObject>) => {
     const obj: IHostsListObject = Object.assign({}, hosts, kv)
+    // 脚本触发型 URL（file:// + .ps1）：永远按触发型方案运行——
+    // 刷新时执行脚本，输出不进入系统 hosts 管线，因此强制 as_hosts=false。
+    if (kv.url !== undefined && isScriptTriggerUrl(kv.url) && obj.type === 'remote') {
+      obj.as_hosts = false
+    }
     setHosts(obj)
   }
 
@@ -156,6 +179,18 @@ const EditHostsInfo = () => {
     },
     [hosts],
   )
+
+  const onBrowseUrlFile = async () => {
+    try {
+      const picked = await actions.pickFilePath()
+      if (typeof picked === 'string' && picked) {
+        // 转成 file:// URL 填入（.ps1 即触发型脚本方案）
+        onUpdate({ url: toFileUrl(picked) })
+      }
+    } catch (e) {
+      console.error(e)
+    }
+  }
 
   const onBrowseSavePath = async () => {
     if (!hosts) return
@@ -231,13 +266,28 @@ const EditHostsInfo = () => {
       <>
         <Box className={styles.ln}>
           <Text mb="8px">URL</Text>
-          <TextInput
-            aria-label="URL"
-            value={hosts?.url || ''}
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) => onUpdate({ url: e.target.value })}
-            placeholder={lang.url_placeholder}
-            onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => e.key === 'Enter' && onSave()}
-          />
+          <Group gap="8px" align="flex-start" wrap="wrap">
+            <TextInput
+              aria-label="URL"
+              style={{ flex: 1, minWidth: 0 }}
+              value={hosts?.url || ''}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => onUpdate({ url: e.target.value })}
+              placeholder={lang.url_placeholder}
+              onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => e.key === 'Enter' && onSave()}
+            />
+            <Button
+              variant="default"
+              leftSection={<BiFolderOpen />}
+              onClick={() => {
+                onBrowseUrlFile()
+              }}
+            >
+              {lang.url_pick_file}
+            </Button>
+          </Group>
+          {isScriptTriggerUrl(hosts?.url) ? (
+            <DescriptionText mt="8px">{lang.url_script_desc}</DescriptionText>
+          ) : null}
         </Box>
 
         <Box className={styles.ln}>
@@ -326,6 +376,7 @@ const EditHostsInfo = () => {
           <Switch
             aria-label={lang.as_hosts}
             checked={hosts?.as_hosts !== false}
+            disabled={isScriptTriggerUrl(hosts?.url)}
             onChange={(e) => onUpdate({ as_hosts: e.currentTarget.checked })}
           />
           <DescriptionText mt="8px">{lang.as_hosts_desc}</DescriptionText>

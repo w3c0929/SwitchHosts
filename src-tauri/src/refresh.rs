@@ -26,8 +26,11 @@ use std::time::Duration;
 
 use serde_json::{json, Value};
 use tauri::{AppHandle, Emitter, Manager, Runtime};
+use tokio::process::Command as TokioCommand;
+use tokio::time::timeout;
 
 use crate::http;
+use crate::script_trigger;
 use crate::storage::{entries, manifest::Manifest, AppState};
 
 /// Fallback poll interval: slept when no remote node has a due time
@@ -119,6 +122,10 @@ async fn refresh_one_inner<R: Runtime>(
     let as_hosts = snapshot.get("as_hosts").and_then(Value::as_bool) != Some(false);
 
     // Step 2 + 2.5 + 3: 按用途分两条路径。
+    //  - 脚本触发方案（file:// 指向本机 .ps1）：执行该脚本（触发型
+    //    运行），运行结果（stdout/stderr + 退出码）写回内部 entries 供
+    //    右侧编辑器查看；不产生内容变更事件、绝不进入系统 hosts 管线
+    //    （aggregate 侧有同名防御），有 save_path 时镜像输出到该文件。
     //  - hosts 方案：fetch_remote 按文本读取（hosts 上限 32MB、30s 超时），
     //    LF 规范化后镜像到 save_path，再写入内部 entries。
     //  - 仅抓取/下载方案（有 save_path）：流式下载（不设大小上限、默认
@@ -130,7 +137,56 @@ async fn refresh_one_inner<R: Runtime>(
     // 刷新成功后是否推送通知（成功后用 Step 4 的最新配置推送，
     // 防竞态——用户可能正在切换渠道或增删 webhook）。
     let mut refresh_success_notify = false;
-    if as_hosts {
+    // 脚本方案：执行成功但退出码非 0 时，刷新本身算完成（结果已写入
+    // entries），但按失败推送通知并附退出码说明。
+    let mut script_failure_detail: Option<String> = None;
+    if let Some(script_path) = script_trigger::script_path_from_url(&url) {
+        match run_script_trigger(&script_path).await {
+            Ok(run) => {
+                let new_content = entries::normalize_to_lf(&format_script_run_output(&url, &run));
+                if let Some(save_path) = snapshot.get("save_path").and_then(Value::as_str) {
+                    let save_path = save_path.trim();
+                    if !save_path.is_empty() {
+                        if let Err(message) = write_save_copy(save_path, &new_content) {
+                            log::warn!(
+                                "remote {id}: failed to mirror script output to save_path: {message}"
+                            );
+                        }
+                    }
+                }
+                // 与内部 entries 比对后写回（避免每次刷新都触发磁盘写入）。
+                let old_content = entries::read_entry(&state.paths.entries_dir, id)
+                    .map_err(|e| RefreshError::Storage {
+                        message: e.to_string(),
+                    })?;
+                if old_content != new_content {
+                    entries::write_entry(&state.paths.entries_dir, id, &new_content)
+                        .map_err(|e| RefreshError::Storage {
+                            message: e.to_string(),
+                        })?;
+                }
+                if run.success {
+                    refresh_success_notify = true;
+                } else {
+                    script_failure_detail = Some(format!(
+                        "PowerShell script exited with code {}",
+                        run.exit_code
+                    ));
+                }
+            }
+            Err(message) => {
+                // 脚本无法运行（文件缺失 / 无法启动 PowerShell 等）：
+                // 与其它刷新失败一致——显式重读 manifest，用当时的配置
+                // 推送失败通知，再返回错误。
+                if let Ok(fresh_manifest) = Manifest::load(&state.paths) {
+                    if let Some(node) = find_node(&fresh_manifest.root, id) {
+                        crate::webhook::notify_download_outcome(app, state, &node, false, &message);
+                    }
+                }
+                return Err(RefreshError::Fetch { message });
+            }
+        }
+    } else if as_hosts {
         let new_content = fetch_remote(&url, state).await.map_err(|e| {
             // hosts 型方案刷新失败时也推送通知
             let message = match &e {
@@ -307,8 +363,11 @@ async fn refresh_one_inner<R: Runtime>(
     }
 
     // 刷新成功通知：用 Step 4 锁内重读的最新配置推送（防竞态——
-    // 用户可能正在切换渠道或增删 webhook）。
-    if refresh_success_notify {
+    // 用户可能正在切换渠道或增删 webhook）。脚本方案退出码非 0 时
+    // 按失败推送，附加退出码说明。
+    if let Some(detail) = script_failure_detail {
+        crate::webhook::notify_download_outcome(app, state, &updated_snapshot, false, &detail);
+    } else if refresh_success_notify {
         crate::webhook::notify_download_outcome(app, state, &updated_snapshot, true, "");
     }
 
@@ -701,6 +760,154 @@ fn copy_file_download(src: &Path, target: &Path) -> Result<(), String> {
     }
     drop(file);
     finalize_part_file(&part, target)
+}
+
+// ---- PowerShell script trigger --------------------------------------------
+
+/// Hard timeout for a trigger-script run. Generous enough for scripts
+/// that do real work (package managers, network calls), while still
+/// bounding a runaway script so the refresh scanner never stalls on it.
+const SCRIPT_TIMEOUT: Duration = Duration::from_secs(60);
+/// Per-stream output cap for the editor preview; longer output is
+/// truncated with a marker so a chatty script can't flood the entries
+/// store or the editor.
+const SCRIPT_OUTPUT_CAP: usize = 1 << 20; // 1 MiB
+
+/// Result of a completed script run.
+struct ScriptRun {
+    /// Exit code 0 → success.
+    success: bool,
+    /// Numeric exit code; -1 when the process died without one.
+    exit_code: i32,
+    stdout: String,
+    stderr: String,
+    duration_ms: u64,
+}
+
+/// Execute a local `.ps1` file as a trigger-type run: PowerShell runs
+/// the script with stdin closed, stdout/stderr captured, launched
+/// hidden (no console window flash) and killed on timeout / drop.
+async fn run_script_trigger(path: &Path) -> Result<ScriptRun, String> {
+    if !path.exists() {
+        return Err(format!("script not found: {}", path.display()));
+    }
+    let now = std::time::Instant::now();
+    let child = spawn_script(path).map_err(|e| {
+        format!(
+            "failed to start PowerShell for {}: {e}",
+            path.display()
+        )
+    })?;
+    let wait = child.wait_with_output();
+    match timeout(SCRIPT_TIMEOUT, wait).await {
+        Ok(Ok(output)) => Ok(ScriptRun {
+            success: output.status.success(),
+            exit_code: output.status.code().unwrap_or(-1),
+            stdout: truncate_output(&output.stdout),
+            stderr: truncate_output(&output.stderr),
+            duration_ms: now.elapsed().as_millis() as u64,
+        }),
+        Ok(Err(e)) => Err(format!("failed to wait for script: {e}")),
+        Err(_elapsed) => {
+            // `wait_with_output` already moved the child, so we can't
+            // kill it from here directly — `spawn_script` sets
+            // `kill_on_drop(true)` so Tokio terminates the process when
+            // the future is dropped at the end of this arm (same
+            // pattern as hosts_apply::cmd_runner).
+            Err(format!(
+                "script timed out after {}s",
+                SCRIPT_TIMEOUT.as_secs()
+            ))
+        }
+    }
+}
+
+fn truncate_output(bytes: &[u8]) -> String {
+    let text = String::from_utf8_lossy(bytes).into_owned();
+    if text.len() <= SCRIPT_OUTPUT_CAP {
+        return text;
+    }
+    // `String::truncate` panics if the index is not a char boundary —
+    // walk back to the nearest safe boundary before cutting.
+    let mut end = SCRIPT_OUTPUT_CAP;
+    while end > 0 && !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    let mut cut = text;
+    cut.truncate(end);
+    cut.push_str("\n… [output truncated]");
+    cut
+}
+
+/// Launch the script with the platform's PowerShell. Windows uses the
+/// inbox `powershell.exe` (ExecutionPolicy Bypass so user scripts run
+/// without elevation); elsewhere `pwsh` must be on PATH.
+#[cfg(target_os = "windows")]
+fn spawn_script(path: &Path) -> std::io::Result<tokio::process::Child> {
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    TokioCommand::new("powershell.exe")
+        .arg("-NoProfile")
+        .arg("-ExecutionPolicy")
+        .arg("Bypass")
+        .arg("-File")
+        .arg(path)
+        .creation_flags(CREATE_NO_WINDOW)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .kill_on_drop(true)
+        .spawn()
+}
+
+#[cfg(not(target_os = "windows"))]
+fn spawn_script(path: &Path) -> std::io::Result<tokio::process::Child> {
+    TokioCommand::new("pwsh")
+        .arg("-NoProfile")
+        .arg("-File")
+        .arg(path)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .kill_on_drop(true)
+        .spawn()
+}
+
+/// Compose the editor-facing preview text for a script run: a small
+/// header with the script path / timing / exit status, then the
+/// captured stdout and stderr sections.
+fn format_script_run_output(url: &str, run: &ScriptRun) -> String {
+    let status = if run.success {
+        format!("success (exit code {})", run.exit_code)
+    } else {
+        format!("failed (exit code {})", run.exit_code)
+    };
+    let mut out = String::new();
+    out.push_str("# ==== PowerShell trigger run ====\n");
+    out.push_str(&format!("# URL: {url}\n"));
+    out.push_str(&format!(
+        "# Finished: {}\n",
+        format_timestamp(chrono::Utc::now().timestamp_millis())
+    ));
+    out.push_str(&format!("# Status: {status}\n"));
+    out.push_str(&format!(
+        "# Elapsed: {:.2}s\n",
+        run.duration_ms as f64 / 1000.0
+    ));
+    if !run.stdout.is_empty() {
+        out.push_str("\n--- stdout ---\n");
+        out.push_str(&run.stdout);
+        if !run.stdout.ends_with('\n') {
+            out.push('\n');
+        }
+    }
+    if !run.stderr.is_empty() {
+        out.push_str("\n--- stderr ---\n");
+        out.push_str(&run.stderr);
+        if !run.stderr.ends_with('\n') {
+            out.push('\n');
+        }
+    }
+    out
 }
 
 /// Write the mirror copy of a remote hosts entry to the user-configured
@@ -1288,5 +1495,103 @@ mod tests {
         assert_eq!(scan_delay_from_wait(Some(5_000)), SCAN_MIN_WAKE);
         assert_eq!(scan_delay_from_wait(Some(30_000)), Duration::from_secs(30));
         assert_eq!(scan_delay_from_wait(Some(120_000)), SCAN_INTERVAL);
+    }
+
+    #[test]
+    fn format_script_run_output_carries_header_and_streams() {
+        let run = ScriptRun {
+            success: true,
+            exit_code: 0,
+            stdout: "智能模式已开启\n".to_string(),
+            stderr: String::new(),
+            duration_ms: 1234,
+        };
+        let out = format_script_run_output(
+            "file:///C:/Users/x/智能模式Scoop(3).ps1",
+            &run,
+        );
+        assert!(out.contains("# ==== PowerShell trigger run ===="));
+        assert!(out.contains("file:///C:/Users/x/智能模式Scoop(3).ps1"));
+        assert!(out.contains("# Status: success (exit code 0)"));
+        assert!(out.contains("# Elapsed: 1.23s"));
+        assert!(out.contains("--- stdout ---"));
+        assert!(out.contains("智能模式已开启"));
+        assert!(!out.contains("--- stderr ---"));
+    }
+
+    #[test]
+    fn format_script_run_output_marks_failure_and_stderr() {
+        let run = ScriptRun {
+            success: false,
+            exit_code: 1,
+            stdout: String::new(),
+            stderr: "boom\n".to_string(),
+            duration_ms: 50,
+        };
+        let out = format_script_run_output("file:///C:/x/fail.ps1", &run);
+        assert!(out.contains("# Status: failed (exit code 1)"));
+        assert!(out.contains("--- stderr ---"));
+        assert!(out.contains("boom"));
+        assert!(!out.contains("--- stdout ---"));
+    }
+
+    #[test]
+    fn truncate_output_caps_oversized_streams() {
+        let big = vec![b'a'; SCRIPT_OUTPUT_CAP + 100];
+        let out = truncate_output(&big);
+        assert!(out.len() <= SCRIPT_OUTPUT_CAP + 64);
+        assert!(out.ends_with("[output truncated]"));
+        assert_eq!(truncate_output(b"small"), "small");
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn run_script_trigger_executes_real_ps1() {
+        use crate::script_trigger::script_path_from_url;
+        // 端到端验证：真实 powershell.exe 执行，确认 -File 参数、
+        // ExecutionPolicy Bypass 与输出捕获链路可用。
+        let root = std::env::temp_dir().join(format!(
+            "swh-script-run-test-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let script = root.join("hello.ps1");
+        std::fs::write(&script, "Write-Output 'hello ps1 trigger'; exit 0").unwrap();
+
+        let path = script_path_from_url(&format!("file:///{}", script.to_string_lossy()))
+            .expect("script url");
+        let result = tokio::runtime::Runtime::new()
+            .unwrap()
+            .block_on(async {
+                tokio::time::timeout(Duration::from_secs(30), run_script_trigger(&path))
+                    .await
+                    .expect("run must not hang")
+            });
+        let run = result.expect("run ok");
+        assert!(run.success, "exit code {}", run.exit_code);
+        assert!(
+            run.stdout.contains("hello ps1 trigger"),
+            "stdout: {}",
+            run.stdout
+        );
+
+        std::fs::remove_dir_all(root).ok();
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn run_script_trigger_reports_missing_script() {
+        let missing = Path::new("Z:\\definitely\\missing\\nope.ps1");
+        let result = tokio::runtime::Runtime::new()
+            .unwrap()
+            .block_on(run_script_trigger(missing));
+        match result {
+            Err(err) => assert!(err.contains("script not found"), "{err}"),
+            Ok(_) => panic!("missing script must error"),
+        }
     }
 }

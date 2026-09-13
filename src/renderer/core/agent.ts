@@ -52,6 +52,7 @@ const LEGACY_TO_NEW: Record<string, string> = {
   refreshHosts: 'refresh_remote_hosts',
   refreshAllRemoteHosts: 'refresh_all_remote_hosts',
   pickSavePath: 'pick_save_path',
+  pickFilePath: 'pick_file_path',
   getHistoryList: 'get_apply_history',
   deleteHistory: 'delete_apply_history_item',
   deleteHistoryMany: 'delete_apply_history_items',
