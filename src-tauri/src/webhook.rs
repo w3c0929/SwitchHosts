@@ -32,29 +32,39 @@ pub const FORMAT_MARKDOWN: &str = "markdown";
 pub const PLACEHOLDER_TITLE: &str = "{title}";
 pub const PLACEHOLDER_RESULT: &str = "{result}";
 pub const PLACEHOLDER_MESSAGE: &str = "{message}";
+/// 通知内容留空时采用的默认格式（等价于用户填写了
+/// `{title} {result} {message}` 模板）
+pub const DEFAULT_NOTIFY_TEMPLATE: &str = "{title} {result} {message}";
 
 /// Resolve the final notification text. `result` is "刷新成功"/"刷新失败",
 /// `detail` holds the failure reason (empty on success). When the user
-/// configured a `notify_message` template it is used instead, with
-/// placeholders substituted; an empty template falls back to the built-in
-/// outcome line.
+/// configured a `notify_message` template it is used with placeholders
+/// substituted; an empty template falls back to the built-in default
+/// format `{title} {result} {message}` (trailing space trimmed when
+/// there is no detail).
 pub fn resolve_notify_message(
     node_title: &str,
     template: &str,
     result: &str,
     detail: &str,
 ) -> String {
-    if template.trim().is_empty() {
-        return if detail.is_empty() {
-            result.to_string()
-        } else {
-            format!("{result}：{detail}")
-        };
-    }
-    template
+    let is_default = template.trim().is_empty();
+    let tpl = if is_default {
+        DEFAULT_NOTIFY_TEMPLATE
+    } else {
+        template
+    };
+    let out = tpl
         .replace(PLACEHOLDER_TITLE, node_title)
         .replace(PLACEHOLDER_RESULT, result)
-        .replace(PLACEHOLDER_MESSAGE, detail)
+        .replace(PLACEHOLDER_MESSAGE, detail);
+    // 默认格式下 detail 为空时不保留尾随空格（避免"标题 刷新成功 "
+    // 这样的尾巴）；用户自定义模板按原样替换。
+    if is_default {
+        out.trim_end().to_string()
+    } else {
+        out
+    }
 }
 
 /// 钉钉机器人「加签」模式：把 `timestamp` 与 HMAC-SHA256 签名拼进 URL。
@@ -335,14 +345,20 @@ mod tests {
     }
 
     #[test]
-    fn empty_template_keeps_builtin_outcome_line() {
+    fn empty_template_uses_default_title_result_message_format() {
+        // 通知内容留空 → 默认格式 {title} {result} {message}
         assert_eq!(
-            resolve_notify_message("方案A", "", "下载完成", ""),
-            "下载完成"
+            resolve_notify_message("方案A", "", "刷新成功", ""),
+            "方案A 刷新成功"
         );
         assert_eq!(
-            resolve_notify_message("方案A", "", "下载失败", "HTTP 404"),
-            "下载失败：HTTP 404"
+            resolve_notify_message("方案A", "", "刷新失败", "HTTP 404"),
+            "方案A 刷新失败 HTTP 404"
+        );
+        // 默认格式与显式填写 {title} {result} {message} 完全等价
+        assert_eq!(
+            resolve_notify_message("方案A", DEFAULT_NOTIFY_TEMPLATE, "刷新失败", "HTTP 404"),
+            resolve_notify_message("方案A", "", "刷新失败", "HTTP 404")
         );
     }
 
@@ -355,6 +371,10 @@ mod tests {
             "HTTP 500",
         );
         assert_eq!(out, "【PortableGit】下载失败：HTTP 500");
+
+        // 用户自定义模板不做尾随空格修剪（与默认格式行为区分）
+        let custom = resolve_notify_message("A", "{title} {result} {message}", "成功", "");
+        assert_eq!(custom, "A 成功 ");
     }
 
     #[test]
