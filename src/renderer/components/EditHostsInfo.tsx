@@ -73,11 +73,12 @@ const defaultNameFromUrl = (url?: string): string => {
   }
 }
 
-// 是否为脚本触发型 URL：file:// 指向本机 .ps1（大小写不敏感）。
-// 这类方案刷新时执行脚本（触发型运行），而非读取内容作为 hosts。
+// 是否为脚本触发型 URL：file:// 指向本机脚本（.ps1 / .bat / .cmd，
+// 大小写不敏感）。这类方案刷新时执行脚本（触发型运行），而非读取
+// 内容作为 hosts。
 const isScriptTriggerUrl = (url?: string): boolean => {
   const u = (url || '').trim()
-  return u.toLowerCase().startsWith('file://') && /\.ps1$/i.test(u)
+  return u.toLowerCase().startsWith('file://') && /\.(ps1|bat|cmd)$/i.test(u)
 }
 
 // 把本地路径转成 file:// URL：Windows `C:\x\y.ps1` →

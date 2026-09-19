@@ -272,7 +272,7 @@ const lang: LanguageDict = {
   url_pick_file: 'Parcourir un fichier local',
   url_placeholder: 'http:// ou https:// ou file://',
   url_script_desc:
-    'Cette URL pointe vers un script PowerShell local (.ps1) : il s\'exécute en mode déclencheur — l\'actualisation exécute automatiquement le script et le résultat s\'affiche dans l\'éditeur de droite. Le contenu n\'entre jamais dans le hosts système. Les fichiers générés par le script sont écrits à côté du script par défaut ; utilisez le « Chemin de sauvegarde local » ci-dessous pour choisir un autre dossier de sortie.',
+    'Cette URL pointe vers un script local (.ps1 / .bat / .cmd) : il s\'exécute en mode déclencheur — l\'actualisation exécute automatiquement le script et le résultat s\'affiche dans l\'éditeur de droite. Le contenu n\'entre jamais dans le hosts système. Les fichiers générés par le script sont écrits à côté du script par défaut ; utilisez le « Chemin de sauvegarde local » ci-dessous pour choisir un autre dossier de sortie.',
   usage_data_agree: "Oui, soumettre de manière anonyme mes données d'utilisation",
   usage_data_help:
     "Voulez-vous nous aider à améliorer SwitchHosts en soumettant périodiquement vos données d'utilisation de manière anonyme ?",

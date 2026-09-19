@@ -851,13 +851,14 @@ pub async fn pick_save_path<R: Runtime>(app: AppHandle<R>, args: Args) -> Value 
 
 /// Open a native "open file" dialog and return the chosen path, or
 /// null when cancelled. Used by the remote-hosts editor to pick a
-/// local file for a `file://` URL (e.g. a `.ps1` script-trigger).
+/// local file for a `file://` URL (e.g. a `.ps1` / `.bat` script-trigger).
 #[tauri::command]
 pub async fn pick_file_path<R: Runtime>(app: AppHandle<R>, _args: Args) -> Value {
     let picked = app
         .dialog()
         .file()
         .add_filter("PowerShell 脚本", &["ps1"])
+        .add_filter("批处理文件", &["bat", "cmd"])
         .add_filter("All files", &["*"])
         .blocking_pick_file();
     match picked {

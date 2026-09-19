@@ -249,7 +249,7 @@ const lang: LanguageDict = {
   url_pick_file: '浏览本地文件',
   url_placeholder: 'http:// 或 https:// 或 file://',
   url_script_desc:
-    '该 URL 指向本机 PowerShell 脚本（.ps1），将以触发型方案运行：刷新时自动执行该脚本，运行结果在右侧编辑器显示，内容不会进入系统 hosts；脚本生成的文件默认输出到脚本所在目录，也可在下方的「本地保存路径」指定输出目录。',
+    '该 URL 指向本机脚本（.ps1 / .bat / .cmd），将以触发型方案运行：刷新时自动执行该脚本，运行结果在右侧编辑器显示，内容不会进入系统 hosts；脚本生成的文件默认输出到脚本所在目录，也可在下方的「本地保存路径」指定输出目录。',
   usage_data_agree: '好的，发送匿名的使用数据',
   usage_data_help:
     '您愿意发送匿名的使用数据来帮助我们改进 SwitchHosts 吗？数据中不会包含任何隐私信息。',

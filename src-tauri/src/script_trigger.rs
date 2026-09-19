@@ -1,10 +1,11 @@
-//! `file://` PowerShell-script trigger detection.
+//! `file://` local script-trigger detection.
 //!
 //! A remote scheme whose URL is a `file://` URL pointing at a local
-//! `.ps1` file is treated as a *script-trigger* scheme: refreshing it
-//! executes the script (trigger-type run) instead of fetching content.
-//! The run result is written back to the internal entries cache so the
-//! right-hand editor can display it.
+//! script (PowerShell `.ps1` / batch `.bat` / `.cmd`) is treated as a
+//! *script-trigger* scheme: refreshing it executes the script
+//! (trigger-type run) instead of fetching content. The run result is
+//! written back to the internal entries cache so the right-hand editor
+//! can display it.
 //!
 //! Both the refresh path (`refresh::refresh_one_inner`) and the
 //! system-hosts aggregation path (`hosts_apply::aggregate::is_on`) use
@@ -14,13 +15,13 @@
 
 use std::path::PathBuf;
 
-/// Tolerated file-extension spellings (case-insensitive). PowerShell
-/// scripts are the supported trigger type.
-const SCRIPT_EXT: &str = "ps1";
+/// Tolerated file-extension spellings (case-insensitive): PowerShell
+/// scripts and Windows batch files are the supported trigger types.
+const SCRIPT_EXTS: &[&str] = &["ps1", "bat", "cmd"];
 
 /// Return the local file path when `url` is a `file://` URL pointing at
-/// a PowerShell script (extension `.ps1`, case-insensitive); `None`
-/// otherwise.
+/// a local script (extension `.ps1` / `.bat` / `.cmd`,
+/// case-insensitive); `None` otherwise.
 ///
 /// Accepts the same `file://` spellings as `refresh::read_file_url`:
 /// - `file:///C:/Users/x/foo.ps1` (Windows drive path)
@@ -35,7 +36,7 @@ pub fn script_path_from_url(url: &str) -> Option<PathBuf> {
     let decoded = percent_decode(path_part);
     let path = PathBuf::from(normalize_drive_path(&decoded));
     let ext = path.extension()?.to_str()?.to_ascii_lowercase();
-    if ext == SCRIPT_EXT {
+    if SCRIPT_EXTS.contains(&ext.as_str()) {
         Some(path)
     } else {
         None
@@ -130,6 +131,20 @@ mod tests {
     fn extension_check_is_case_insensitive() {
         assert!(is_script_trigger_url("file:///C:/x/run.PS1"));
         assert!(is_script_trigger_url("file:///C:/x/run.Ps1"));
+        assert!(is_script_trigger_url("file:///C:/x/run.BAT"));
+        assert!(is_script_trigger_url("file:///C:/x/run.Cmd"));
+    }
+
+    #[test]
+    fn batch_files_are_supported_trigger_types() {
+        for (url, expected) in [
+            ("file:///C:/x/setup.bat", "C:/x/setup.bat"),
+            ("file:///C:/x/备份数据.cmd", "C:/x/备份数据.cmd"),
+            ("file:///Users/x/deploy.cmd", "/Users/x/deploy.cmd"),
+        ] {
+            let p = script_path_from_url(url).unwrap_or_else(|| panic!("must match {url}"));
+            assert_eq!(p.to_string_lossy(), expected);
+        }
     }
 
     #[test]
@@ -143,11 +158,13 @@ mod tests {
         assert!(script_path_from_url("file:///C:/tmp/hosts").is_none());
         assert!(script_path_from_url("file:///C:/x/run.txt").is_none());
         assert!(script_path_from_url("file:///C:/x/run.ps1.txt").is_none());
+        assert!(script_path_from_url("file:///C:/x/run.bat.exe").is_none());
         // Extension must be trailing — a query string defeats detection.
         assert!(script_path_from_url("file:///C:/x/run.ps1?x=1").is_none());
+        assert!(script_path_from_url("file:///C:/x/run.bat?x=1").is_none());
         // http(s) URLs never trigger.
         assert!(script_path_from_url("https://example.com/x.ps1").is_none());
-        assert!(script_path_from_url("http://example.com/x.ps1").is_none());
+        assert!(script_path_from_url("http://example.com/x.bat").is_none());
         // Not a file:// URL at all.
         assert!(script_path_from_url("C:/x/run.ps1").is_none());
     }

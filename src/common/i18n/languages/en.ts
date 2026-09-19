@@ -268,7 +268,7 @@ export default {
   url_pick_file: 'Browse Local File',
   url_placeholder: 'http:// or https:// or file://',
   url_script_desc:
-    'This URL points to a local PowerShell script (.ps1): it runs as a trigger-type scheme — refreshing executes the script automatically and the result is shown in the right-hand editor. The content never enters the system hosts. Files the script generates are written next to the script by default; use "Local Save Path" below to choose a different output directory.',
+    'This URL points to a local script (.ps1 / .bat / .cmd): it runs as a trigger-type scheme — refreshing executes the script automatically and the result is shown in the right-hand editor. The content never enters the system hosts. Files the script generates are written next to the script by default; use "Local Save Path" below to choose a different output directory.',
   usage_data_agree: 'Yes, Submit Anonymized Usage Data',
   usage_data_help:
     'Would you like to help us improve SwitchHosts by periodically submitting anonymous usage data?',

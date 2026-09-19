@@ -270,7 +270,7 @@ export default {
   url_pick_file: 'Wybierz plik lokalny',
   url_placeholder: 'http:// lub https:// lub file://',
   url_script_desc:
-    'Ten adres URL wskazuje lokalny skrypt PowerShell (.ps1): działa jako schemat wyzwalany — odświeżenie automatycznie uruchamia skrypt, a wynik jest wyświetlany w edytorze po prawej. Treść nigdy nie trafia do systemowych hosts. Pliki generowane przez skrypt są domyślnie zapisywane obok skryptu; użyj „Lokalnej ścieżki zapisu" poniżej, aby wybrać inny katalog wyjściowy.',
+    'Ten adres URL wskazuje lokalny skrypt (.ps1 / .bat / .cmd): działa jako schemat wyzwalany — odświeżenie automatycznie uruchamia skrypt, a wynik jest wyświetlany w edytorze po prawej. Treść nigdy nie trafia do systemowych hosts. Pliki generowane przez skrypt są domyślnie zapisywane obok skryptu; użyj „Lokalnej ścieżki zapisu" poniżej, aby wybrać inny katalog wyjściowy.',
   usage_data_agree: 'Tak, prześlij anonimowe dane użytkowania',
   usage_data_help:
     'Czy chcesz nam pomóc ulepszyć SwitchHosts, okresowo przesyłając anonimowe dane użytkowania?',

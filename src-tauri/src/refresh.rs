@@ -176,7 +176,7 @@ async fn refresh_one_inner<R: Runtime>(
                     refresh_success_notify = true;
                 } else {
                     script_failure_detail = Some(format!(
-                        "PowerShell script exited with code {}",
+                        "Script exited with code {}",
                         run.exit_code
                     ));
                 }
@@ -791,9 +791,10 @@ struct ScriptRun {
     duration_ms: u64,
 }
 
-/// Execute a local `.ps1` file as a trigger-type run: PowerShell runs
-/// the script with stdin closed, stdout/stderr captured, launched
-/// hidden (no console window flash) and killed on timeout / drop.
+/// Execute a local script file (`.ps1` / `.bat` / `.cmd`) as a
+/// trigger-type run: the script runs with stdin closed, stdout/stderr
+/// captured, launched hidden (no console window flash) and killed on
+/// timeout / drop.
 ///
 /// `work_dir` selects the process working directory — the directory
 /// where relative-path files the script generates (its "产物") land.
@@ -804,12 +805,8 @@ async fn run_script_trigger(path: &Path, work_dir: Option<&Path>) -> Result<Scri
     }
     let cwd = resolve_script_work_dir(path, work_dir);
     let now = std::time::Instant::now();
-    let child = spawn_script(path, &cwd).map_err(|e| {
-        format!(
-            "failed to start PowerShell for {}: {e}",
-            path.display()
-        )
-    })?;
+    let child = spawn_script(path, &cwd)
+        .map_err(|e| format!("failed to execute {}: {e}", path.display()))?;
     let wait = child.wait_with_output();
     match timeout(SCRIPT_TIMEOUT, wait).await {
         Ok(Ok(output)) => Ok(ScriptRun {
@@ -891,11 +888,30 @@ fn truncate_output(bytes: &[u8]) -> String {
 /// Launch the script with the platform's PowerShell. Windows uses the
 /// inbox `powershell.exe` (ExecutionPolicy Bypass so user scripts run
 /// without elevation) wrapped in a `-Command` that forces UTF-8 output
-/// and preserves the script's exit code; elsewhere `pwsh` (UTF-8 by
-/// default) must be on PATH. Both run with `cwd` as working directory.
+/// and preserves the script's exit code; batch files (`.bat`/`.cmd`)
+/// run under `cmd.exe` hidden. Elsewhere `pwsh` (UTF-8 by default)
+/// must be on PATH for `.ps1`; batch files are Windows-only. All run
+/// with `cwd` as working directory.
 #[cfg(target_os = "windows")]
 fn spawn_script(path: &Path, cwd: &Path) -> std::io::Result<tokio::process::Child> {
     const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    if is_batch_script(path) {
+        // cmd /d /c call <path>：call 会正确解析带引号的批处理路径
+        // （cmd /s /c 直接传含空格的路径会被空格截断），路径由 tokio
+        // 按 argv 规则自动加引号。退出码 = 批处理的 errorlevel。
+        return TokioCommand::new("cmd")
+            .arg("/d")
+            .arg("/c")
+            .arg("call")
+            .arg(path)
+            .current_dir(cwd)
+            .creation_flags(CREATE_NO_WINDOW)
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .kill_on_drop(true)
+            .spawn();
+    }
     // 强制 UTF-8 输出，避免中文 Windows 上 PS 5.1 以 GBK 写管道导致乱码；
     // `exit $LASTEXITCODE` 保持脚本退出码（-Command 单独跑退出码会变 1）。
     // 路径用单引号包裹，内嵌单引号翻倍转义。
@@ -920,6 +936,12 @@ fn spawn_script(path: &Path, cwd: &Path) -> std::io::Result<tokio::process::Chil
 
 #[cfg(not(target_os = "windows"))]
 fn spawn_script(path: &Path, cwd: &Path) -> std::io::Result<tokio::process::Child> {
+    if is_batch_script(path) {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::Unsupported,
+            "batch files are only supported on Windows",
+        ));
+    }
     TokioCommand::new("pwsh")
         .arg("-NoProfile")
         .arg("-File")
@@ -932,6 +954,14 @@ fn spawn_script(path: &Path, cwd: &Path) -> std::io::Result<tokio::process::Chil
         .spawn()
 }
 
+/// Is this a Windows batch file (`.bat` / `.cmd`)?
+fn is_batch_script(path: &Path) -> bool {
+    matches!(
+        path.extension().and_then(|e| e.to_str()).map(str::to_ascii_lowercase).as_deref(),
+        Some("bat" | "cmd")
+    )
+}
+
 /// Compose the editor-facing preview text for a script run: a small
 /// header with the script path / timing / exit status, then the
 /// captured stdout and stderr sections.
@@ -942,7 +972,7 @@ fn format_script_run_output(url: &str, run: &ScriptRun) -> String {
         format!("failed (exit code {})", run.exit_code)
     };
     let mut out = String::new();
-    out.push_str("# ==== PowerShell trigger run ====\n");
+    out.push_str("# ==== Script trigger run ====\n");
     out.push_str(&format!("# URL: {url}\n"));
     out.push_str(&format!(
         "# Finished: {}\n",
@@ -1570,7 +1600,7 @@ mod tests {
             "file:///C:/Users/x/智能模式Scoop(3).ps1",
             &run,
         );
-        assert!(out.contains("# ==== PowerShell trigger run ===="));
+        assert!(out.contains("# ==== Script trigger run ===="));
         assert!(out.contains("file:///C:/Users/x/智能模式Scoop(3).ps1"));
         assert!(out.contains("# Status: success (exit code 0)"));
         assert!(out.contains("# Elapsed: 1.23s"));
@@ -1682,6 +1712,71 @@ mod tests {
             Err(err) => assert!(err.contains("script not found"), "{err}"),
             Ok(_) => panic!("missing script must error"),
         }
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn run_script_trigger_executes_real_bat() {
+        // 端到端验证：.bat 走 cmd.exe 分支，退出码/输出/产物目录都正确。
+        let root = std::env::temp_dir().join(format!(
+            "swh-bat-run-test-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        // 注意批处理需要 CRLF 行尾；路径含空格验证引号处理
+        let script = root.join("my script.bat");
+        std::fs::write(
+            &script,
+            "@echo off\r\necho bat-trigger-ok\r\necho done>rel_out.txt\r\nexit /b 0\r\n",
+        )
+        .unwrap();
+
+        let run = tokio::runtime::Runtime::new()
+            .unwrap()
+            .block_on(async {
+                tokio::time::timeout(Duration::from_secs(30), run_script_trigger(&script, None))
+                    .await
+                    .expect("run must not hang")
+            })
+            .expect("run ok");
+        assert!(run.success, "exit code {}", run.exit_code);
+        assert!(
+            run.stdout.contains("bat-trigger-ok"),
+            "stdout: {}",
+            run.stdout
+        );
+        // 默认工作目录 = 批处理所在目录
+        assert!(root.join("rel_out.txt").exists(), "artifact next to bat");
+
+        // 退出码 3 应透传
+        let fail_script = root.join("fail.bat");
+        std::fs::write(&fail_script, "@echo off\r\nexit /b 3\r\n").unwrap();
+        let run2 = tokio::runtime::Runtime::new()
+            .unwrap()
+            .block_on(async {
+                tokio::time::timeout(Duration::from_secs(30), run_script_trigger(&fail_script, None))
+                    .await
+                    .expect("run must not hang")
+            })
+            .expect("run2 ok");
+        assert!(!run2.success, "exit 3 must be a failure");
+        assert_eq!(run2.exit_code, 3);
+
+        std::fs::remove_dir_all(root).ok();
+    }
+
+    #[test]
+    fn is_batch_script_detects_bat_and_cmd_only() {
+        assert!(is_batch_script(Path::new(r"C:\x\a.bat")));
+        assert!(is_batch_script(Path::new(r"C:\x\a.cmd")));
+        assert!(is_batch_script(Path::new(r"C:\x\a.BAT")));
+        assert!(!is_batch_script(Path::new(r"C:\x\a.ps1")));
+        assert!(!is_batch_script(Path::new(r"C:\x\a.txt")));
+        assert!(!is_batch_script(Path::new(r"C:\x\a.bat.exe")));
     }
 
     #[test]
