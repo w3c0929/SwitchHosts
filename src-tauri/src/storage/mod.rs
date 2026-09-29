@@ -21,6 +21,8 @@ pub use error::StorageError;
 pub use paths::V5Paths;
 pub use trashcan::Trashcan;
 
+use std::collections::HashMap;
+use std::collections::HashSet;
 use std::sync::atomic::{AtomicBool, AtomicU64};
 use std::sync::Mutex;
 
@@ -60,6 +62,19 @@ pub struct AppState {
     /// scheme on is picked up within milliseconds rather than up to the
     /// next 60s idle poll.
     pub refresh_wake: tokio::sync::Notify,
+    /// Ids of remote schemes whose refresh (fetch / script run) is
+    /// currently in flight. `refresh::refresh_one_inner` registers here
+    /// before the blocking fetch and removes itself on completion, so a
+    /// concurrent caller (manual refresh vs the background scanner, or
+    /// two scanner wakes racing) skips a node that is already being
+    /// refreshed instead of double-fetching it — no duplicate script
+    /// runs, duplicate downloads, or duplicate notifications.
+    pub inflight_refreshes: Mutex<HashSet<String>>,
+    /// 自动刷新失败的节流记录：失败后只重试一次，重试再失败则跳过
+    /// 该节点直到下一个刷新周期（interval 到期），避免每 5 秒无限
+    /// 重试刷屏。只被后台扫描器（collect_due / next_due_wait / 刷新
+    /// 结果落账）读写；用户手动刷新不受影响。
+    pub refresh_failures: Mutex<HashMap<String, RefreshFailureRecord>>,
     /// Set at startup when a recorded custom data directory could not be
     /// used — it has gone missing (moved/deleted, or can't host the layout),
     /// or its pointer file is unreadable/corrupt. The renderer reads this via
@@ -67,6 +82,18 @@ pub struct AppState {
     /// `None` in the normal case. While `Some`, data-mutating commands are
     /// refused (see `require_data_dir_usable`) and migration is skipped.
     pub data_dir_recovery: Option<paths::DataDirRecovery>,
+}
+
+/// 单个方案自动刷新失败的节流状态。
+///
+/// - `first_failed_ms`：本失败段（周期）首次失败的时间。
+/// - `retried`：该周期内是否已重试过一次。`false` 时下一次扫描允许补
+///   一次重试；`true` 时在该节点 `refresh_interval` 到期（相对
+///   `first_failed_ms`）之前跳过，等待下一个定时周期。
+#[derive(Debug, Clone, Copy)]
+pub struct RefreshFailureRecord {
+    pub first_failed_ms: i64,
+    pub retried: bool,
 }
 
 impl AppState {
@@ -150,6 +177,8 @@ impl AppState {
             is_will_quit: AtomicBool::new(false),
             last_geometry_persist_ms: AtomicU64::new(0),
             refresh_wake: tokio::sync::Notify::new(),
+            inflight_refreshes: Mutex::new(HashSet::new()),
+            refresh_failures: Mutex::new(HashMap::new()),
             data_dir_recovery,
         })
     }
@@ -203,6 +232,8 @@ mod tests {
             is_will_quit: AtomicBool::new(false),
             last_geometry_persist_ms: AtomicU64::new(0),
             refresh_wake: tokio::sync::Notify::new(),
+            inflight_refreshes: Mutex::new(HashSet::new()),
+            refresh_failures: Mutex::new(HashMap::new()),
             data_dir_recovery: recovery,
         }
     }

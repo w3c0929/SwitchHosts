@@ -19,6 +19,7 @@
 //! manifest.json, and *re-find* the target node by id at lock time so
 //! a concurrent renderer edit doesn't get clobbered.
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -31,7 +32,7 @@ use tokio::time::timeout;
 
 use crate::http;
 use crate::script_trigger;
-use crate::storage::{entries, manifest::Manifest, AppState};
+use crate::storage::{entries, manifest::Manifest, AppState, RefreshFailureRecord};
 
 /// Fallback poll interval: slept when no remote node has a due time
 /// yet, and the upper bound for any single wake delay.
@@ -94,7 +95,86 @@ pub async fn refresh_one<R: Runtime>(
     refresh_one_inner(app, state, id, true).await
 }
 
+/// RAII guard marking a node's refresh as in-flight. Acquire before the
+/// blocking fetch / script run and drop on every exit path (including
+/// errors), so a concurrent caller for the same id — a manual refresh
+/// racing the background scanner, or two scanner wakes overlapping —
+/// skips instead of double-fetching (double script run, double
+/// download, double notification). `acquire` returns `None` when the
+/// node is already being refreshed.
+struct InflightGuard<'a> {
+    state: &'a AppState,
+    id: String,
+}
+
+impl<'a> InflightGuard<'a> {
+    fn acquire(state: &'a AppState, id: &str) -> Option<Self> {
+        let mut set = state
+            .inflight_refreshes
+            .lock()
+            .expect("inflight refreshes mutex poisoned");
+        if !set.insert(id.to_string()) {
+            return None;
+        }
+        Some(Self {
+            state,
+            id: id.to_string(),
+        })
+    }
+}
+
+impl Drop for InflightGuard<'_> {
+    fn drop(&mut self) {
+        self.state
+            .inflight_refreshes
+            .lock()
+            .expect("inflight refreshes mutex poisoned")
+            .remove(&self.id);
+    }
+}
+
+/// Refresh wrapper: runs the real refresh then books the outcome into
+/// the failure-throttle table. A success (or an in-flight skip — the
+/// other caller will book it) clears the record; a failure opens a
+/// retry slot. The scan-side filters in [`collect_due_remote_ids`] /
+/// [`next_due_wait_ms`] read this table so a failed node is retried at
+/// most once per cycle and then skipped until its interval elapses.
 async fn refresh_one_inner<R: Runtime>(
+    app: &AppHandle<R>,
+    state: &AppState,
+    id: &str,
+    emit_content_changed: bool,
+) -> Result<RefreshOutcome, RefreshError> {
+    let outcome = refresh_one_impl(app, state, id, emit_content_changed).await;
+    let now_ms = chrono::Utc::now().timestamp_millis();
+    let mut failures = state
+        .refresh_failures
+        .lock()
+        .expect("refresh failures mutex poisoned");
+    match &outcome {
+        Ok(_) => {
+            // 成功（含 in-flight 跳过——真正在刷的那个调用方会落账）：
+            // 清除节流记录，后续自动刷新按正常周期。
+            failures.remove(id);
+        }
+        Err(_) => match failures.entry(id.to_string()) {
+            // 无记录（周期首败）→ 记 first_failed_ms，开放一次重试。
+            // 已有记录（重试也失败）→ 标记 retried，节流到周期结束。
+            std::collections::hash_map::Entry::Vacant(v) => {
+                v.insert(RefreshFailureRecord {
+                    first_failed_ms: now_ms,
+                    retried: false,
+                });
+            }
+            std::collections::hash_map::Entry::Occupied(mut e) => {
+                e.get_mut().retried = true;
+            }
+        },
+    }
+    outcome
+}
+
+async fn refresh_one_impl<R: Runtime>(
     app: &AppHandle<R>,
     state: &AppState,
     id: &str,
@@ -115,6 +195,13 @@ async fn refresh_one_inner<R: Runtime>(
     let url = match snapshot.get("url").and_then(Value::as_str) {
         Some(u) if !u.is_empty() => u.to_string(),
         _ => return Err(RefreshError::NoUrl),
+    };
+    // Register as in-flight BEFORE any blocking work. A concurrent
+    // caller for the same id (manual refresh vs background scanner)
+    // gets `None` here and returns Unchanged — no duplicate fetch,
+    // script run, download or notification. See InflightGuard.
+    let Some(_inflight) = InflightGuard::acquire(state, id) else {
+        return Ok(RefreshOutcome::Unchanged { node: snapshot });
     };
     // 内容用途：缺省/true 视为 hosts 内容；false = 仅抓取/触发，
     // 内容不进入 hosts 管线（不写 entries、不产生内容变更事件），
@@ -513,14 +600,22 @@ async fn next_scan_delay<R: Runtime>(app: &AppHandle<R>) -> Duration {
         }
     };
     let now_ms = chrono::Utc::now().timestamp_millis();
-    scan_delay_from_wait(next_due_wait_ms(&manifest.root, now_ms))
+    let failures = state_guard
+        .refresh_failures
+        .lock()
+        .expect("refresh failures mutex poisoned");
+    scan_delay_from_wait(next_due_wait_ms(&manifest.root, now_ms, &failures))
 }
 
 /// Milliseconds until the nearest due remote node, or `None` when no
 /// node has a due time (no remote nodes at all, every interval is 0,
 /// or no usable URL). Mirrors the eligibility rules of
 /// [`collect_due_remote_ids`].
-fn next_due_wait_ms(nodes: &[Value], now_ms: i64) -> Option<i64> {
+fn next_due_wait_ms(
+    nodes: &[Value],
+    now_ms: i64,
+    failures: &HashMap<String, RefreshFailureRecord>,
+) -> Option<i64> {
     let mut earliest: Option<i64> = None;
     walk_remote(nodes, &mut |node| {
         // 关闭（on !== true）的方案不参与自动刷新，也不占用唤醒节奏
@@ -542,6 +637,17 @@ fn next_due_wait_ms(nodes: &[Value], now_ms: i64) -> Option<i64> {
             })
             .unwrap_or(false);
         if !url_ok {
+            return;
+        }
+        // 失败节流中（已重试一次、周期未结束）的方案不占用唤醒节奏
+        let throttled = is_failure_throttled(
+            node.get("id")
+                .and_then(Value::as_str)
+                .and_then(|id| failures.get(id)),
+            now_ms,
+            interval_sec,
+        );
+        if throttled {
             return;
         }
         let last_ms = node
@@ -581,7 +687,15 @@ async fn scan_once<R: Runtime>(app: &AppHandle<R>) {
         }
     };
     let now_ms = chrono::Utc::now().timestamp_millis();
-    let due_ids = collect_due_remote_ids(&manifest.root, now_ms);
+    let due_ids = {
+        // 块作用域：guard 在 collect 后立即释放，不能跨后续 await 存活
+        // （std MutexGuard 不是 Send，跨 await 会让扫描器 future 不 Send）。
+        let mut failures = state
+            .refresh_failures
+            .lock()
+            .expect("refresh failures mutex poisoned");
+        collect_due_remote_ids(&manifest.root, now_ms, &mut failures)
+    };
     if due_ids.is_empty() {
         return;
     }
@@ -1042,6 +1156,41 @@ fn find_node(nodes: &[Value], id: &str) -> Option<Value> {
     None
 }
 
+/// 防止 `set_list` 用陈旧的前端数据覆盖较新的刷新时间戳。
+///
+/// 背景：手动刷新成功后，前端主树（`hostsData.list`）里该节点的
+/// `last_refresh_ms` 可能仍是旧值；若随后任一次 `set_list` 全量保存
+/// 把旧值写回磁盘，扫描器会误判该节点再次到期并重复刷新（「刷新
+/// 成功后还会再次刷新」）。此保护在保存前把磁盘上更新的
+/// `last_refresh` / `last_refresh_ms` 恢复到 `new_root` 的对应节点
+/// —— 只增不降，磁盘没有的节点（新建）不受影响。
+pub fn protect_last_refresh_against_stale(disk_root: &[Value], new_root: &mut [Value]) {
+    for node in new_root.iter_mut() {
+        if node.get("type").and_then(Value::as_str) == Some("remote") {
+            if let Some(node_id) = node.get("id").and_then(Value::as_str) {
+                if let Some(disk) = find_node(disk_root, node_id) {
+                    if let Some(dms) = disk.get("last_refresh_ms").and_then(Value::as_i64) {
+                        let new_ms = node.get("last_refresh_ms").and_then(Value::as_i64);
+                        if new_ms.is_none_or(|n| n < dms) {
+                            if let Some(obj) = node.as_object_mut() {
+                                obj.insert("last_refresh_ms".to_string(), json!(dms));
+                                if let Some(ts) = disk.get("last_refresh") {
+                                    if !ts.is_null() {
+                                        obj.insert("last_refresh".to_string(), ts.clone());
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if let Some(children) = node.get_mut("children").and_then(Value::as_array_mut) {
+            protect_last_refresh_against_stale(disk_root, children);
+        }
+    }
+}
+
 fn stamp_node(nodes: &mut [Value], id: &str, ts_str: &str, ts_ms: i64) -> bool {
     for node in nodes.iter_mut() {
         if node.get("id").and_then(Value::as_str) == Some(id) {
@@ -1074,7 +1223,25 @@ fn collect_remote_ids(nodes: &[Value]) -> Vec<String> {
     out
 }
 
-fn collect_due_remote_ids(nodes: &[Value], now_ms: i64) -> Vec<String> {
+/// 失败节流判定：该节点已重试过一次且周期（interval）尚未结束 → 节流
+/// （跳过自动刷新）。`retried=false`（首次失败后）总是放行，留一次重试
+/// 机会；记录过期（超过 interval）也放行，由 collect 解锁新周期。
+fn is_failure_throttled(
+    record: Option<&RefreshFailureRecord>,
+    now_ms: i64,
+    interval_sec: i64,
+) -> bool {
+    match record {
+        None => false,
+        Some(rec) => rec.retried && now_ms - rec.first_failed_ms < interval_sec * 1000,
+    }
+}
+
+fn collect_due_remote_ids(
+    nodes: &[Value],
+    now_ms: i64,
+    failures: &mut HashMap<String, RefreshFailureRecord>,
+) -> Vec<String> {
     let mut out = Vec::new();
     walk_remote(nodes, &mut |node| {
         if !is_enabled(node) {
@@ -1100,6 +1267,18 @@ fn collect_due_remote_ids(nodes: &[Value], now_ms: i64) -> Vec<String> {
             .unwrap_or(false);
         if !url_ok {
             return;
+        }
+        // 失败节流：已重试一次且周期未结束 → 跳过；周期已结束 →
+        // 清除记录放行（本次失败将开启新一段「首败 → 重试一次」）。
+        if let Some(id) = node.get("id").and_then(Value::as_str) {
+            if let Some(rec) = failures.get(id) {
+                if is_failure_throttled(Some(rec), now_ms, interval_sec) {
+                    return;
+                }
+                if rec.retried {
+                    failures.remove(id);
+                }
+            }
         }
         let last_ms = node
             .get("last_refresh_ms")
@@ -1149,6 +1328,37 @@ fn format_timestamp(ms: i64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashSet;
+    use std::sync::atomic::{AtomicBool, AtomicU64};
+    use std::sync::Mutex;
+
+    use crate::storage::{manifest::Manifest, AppConfig, V5Paths};
+
+    fn temp_app_state() -> AppState {
+        let root = std::env::temp_dir().join(format!(
+            "swh-refresh-guard-test-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let paths = V5Paths::under(root);
+        paths.ensure_dirs().unwrap();
+        AppState {
+            paths,
+            config: Mutex::new(AppConfig::default()),
+            store_lock: Mutex::new(()),
+            config_write_lock: Mutex::new(()),
+            update_check_lock: tokio::sync::Mutex::new(()),
+            is_will_quit: AtomicBool::new(false),
+            last_geometry_persist_ms: AtomicU64::new(0),
+            refresh_wake: tokio::sync::Notify::new(),
+            inflight_refreshes: Mutex::new(HashSet::new()),
+            refresh_failures: Mutex::new(HashMap::new()),
+            data_dir_recovery: None,
+        }
+    }
 
     fn tree() -> Vec<Value> {
         // Mixed types under a folder so the walk_remote / find_node /
@@ -1218,6 +1428,211 @@ mod tests {
     }
 
     #[test]
+    fn inflight_guard_skips_second_acquire_until_drop() {
+        // 并发去重语义：同一 id 第二个 acquire 返回 None（跳过刷新），
+        // 第一个 guard drop 后可重新获取；不同 id 互不影响。
+        let state = temp_app_state();
+        let _g1 = InflightGuard::acquire(&state, "r1").expect("first acquire");
+        assert!(
+            InflightGuard::acquire(&state, "r1").is_none(),
+            "same id while in flight must be skipped"
+        );
+        let _g2 = InflightGuard::acquire(&state, "r2").expect("other id");
+        drop(_g1);
+        assert!(
+            InflightGuard::acquire(&state, "r1").is_some(),
+            "re-acquire after drop"
+        );
+        drop(_g2);
+    }
+
+    #[test]
+    fn protect_last_refresh_restores_newer_disk_stamp_only() {
+        // 只增不降：旧值恢复磁盘新值、缺失值补回、新建节点（磁盘无）
+        // 不动、比磁盘更新的值保留。
+        let disk: Vec<Value> = json!([
+            { "id": "r1", "type": "remote", "last_refresh": "2026-09-29 10:00:00", "last_refresh_ms": 1000 },
+            { "id": "folder", "type": "folder", "children": [
+                { "id": "r2", "type": "remote", "last_refresh": "T2", "last_refresh_ms": 2000 },
+            ]},
+        ])
+        .as_array()
+        .cloned()
+        .unwrap();
+
+        let mut incoming: Vec<Value> = json!([
+            // 旧值（500 < 1000）→ 恢复磁盘的 1000
+            { "id": "r1", "type": "remote", "last_refresh": "stale", "last_refresh_ms": 500 },
+            // 磁盘没有该 id → 不动
+            { "id": "r-new", "type": "remote", "last_refresh_ms": 3000 },
+            // 更晚的合法数据 → 保留（不降）
+            { "id": "r3", "type": "remote", "last_refresh_ms": 9000 },
+            // 嵌套节点缺失 last_refresh_ms → 补回磁盘值
+            { "id": "folder", "type": "folder", "children": [
+                { "id": "r2", "type": "remote" },
+            ]},
+        ])
+        .as_array()
+        .cloned()
+        .unwrap();
+
+        protect_last_refresh_against_stale(&disk, &mut incoming);
+
+        let r1 = find_node(&incoming, "r1").unwrap();
+        assert_eq!(r1.get("last_refresh_ms").and_then(Value::as_i64), Some(1000));
+        assert_eq!(
+            r1.get("last_refresh").and_then(Value::as_str),
+            Some("2026-09-29 10:00:00")
+        );
+        let r_new = find_node(&incoming, "r-new").unwrap();
+        assert_eq!(
+            r_new.get("last_refresh_ms").and_then(Value::as_i64),
+            Some(3000),
+            "new node must be untouched"
+        );
+        let r3 = find_node(&incoming, "r3").unwrap();
+        assert_eq!(
+            r3.get("last_refresh_ms").and_then(Value::as_i64),
+            Some(9000),
+            "newer value must be kept"
+        );
+        let r2 = find_node(&incoming, "r2").unwrap();
+        assert_eq!(r2.get("last_refresh_ms").and_then(Value::as_i64), Some(2000));
+        assert_eq!(r2.get("last_refresh").and_then(Value::as_str), Some("T2"));
+    }
+
+    #[test]
+    fn stale_set_list_does_not_regress_last_refresh_ms() {
+        // 端到端链路模拟（真实 manifest 文件往返）：
+        // 刷新成功 stamp 新值 → 前端全量 set_list 携带旧值 → 保护后磁盘
+        // 时间戳不回退 → 扫描器不误判到期（不再造成「刷新后又刷」）。
+        let root = std::env::temp_dir().join(format!(
+            "swh-protect-e2e-test-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let paths = V5Paths::under(root.clone());
+        paths.ensure_dirs().unwrap();
+
+        // 1. 初始 manifest：r1 interval=60s，从未刷新
+        let initial = Manifest {
+            format: "switchhosts-data".to_string(),
+            schema_version: 1,
+            root: vec![json!({
+                "id": "r1", "type": "remote", "on": true,
+                "url": "file:///tmp/hosts", "refresh_interval": 60,
+                "last_refresh_ms": 0,
+            })],
+        };
+        initial.save(&paths).unwrap();
+
+        // 2. 模拟刷新成功（refresh_one Step 4 的 stamp 路径）
+        let mut m = Manifest::load(&paths).unwrap();
+        stamp_node(&mut m.root, "r1", "2026-09-29 10:00:00", 1_000_000);
+        m.save(&paths).unwrap();
+
+        // 3. 前端全量 set_list：携带陈旧 last_refresh_ms=100
+        let mut incoming = vec![json!({
+            "id": "r1", "type": "remote", "on": true,
+            "url": "file:///tmp/hosts", "refresh_interval": 60,
+            "last_refresh": "old", "last_refresh_ms": 100,
+        })];
+        let disk = Manifest::load(&paths).unwrap();
+        protect_last_refresh_against_stale(&disk.root, &mut incoming);
+        let mut m2 = disk;
+        m2.root = incoming;
+        m2.save(&paths).unwrap();
+
+        // 4. 磁盘时间戳保持刷新后的新值
+        let after = Manifest::load(&paths).unwrap();
+        let node = find_node(&after.root, "r1").unwrap();
+        assert_eq!(
+            node.get("last_refresh_ms").and_then(Value::as_i64),
+            Some(1_000_000),
+            "stale set_list must not regress last_refresh_ms"
+        );
+        assert_eq!(
+            node.get("last_refresh").and_then(Value::as_str),
+            Some("2026-09-29 10:00:00")
+        );
+
+        // 5. 20s 后扫描器判定：interval=60s 尚未到期 → 不重复刷新
+        let due = collect_due_remote_ids(&after.root, 1_000_000 + 20_000, &mut HashMap::new());
+        assert!(
+            !due.iter().any(|id| id == "r1"),
+            "stale set_list must not re-due the node"
+        );
+
+        std::fs::remove_dir_all(root).ok();
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn concurrent_refresh_guard_runs_script_once() {
+        // 端到端：两个并发调用者同时刷新同一脚本触发方案，guard 保证
+        // 脚本只执行一次（修复前会执行两次）。counter.bat 每次运行
+        // 追加一行到 counter.txt。
+        let root = std::env::temp_dir().join(format!(
+            "swh-guard-e2e-test-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let script = root.join("counter.bat");
+        std::fs::write(&script, "@echo off\r\necho run>>counter.txt\r\nexit /b 0\r\n").unwrap();
+
+        let state = temp_app_state();
+        let script = script.clone();
+        tokio::runtime::Runtime::new()
+            .unwrap()
+            .block_on(async {
+                // A 先拿到 guard（50ms 内完成脚本）；B 在 A 执行期间 acquire →
+                // 返回 None → 跳过执行（模拟 refresh_one_inner 的 Unchanged）。
+                let (a, b) = tokio::join!(
+                    async {
+                        let _g = InflightGuard::acquire(&state, "script-1").expect("A wins the race");
+                        tokio::time::sleep(Duration::from_millis(80)).await;
+                        let run = run_script_trigger(&script, None).await.expect("run A");
+                        assert!(run.success);
+                        drop(_g);
+                        "A-ran".to_string()
+                    },
+                    async {
+                        tokio::time::sleep(Duration::from_millis(10)).await;
+                        match InflightGuard::acquire(&state, "script-1") {
+                            Some(_g) => {
+                                drop(_g);
+                                run_script_trigger(&script, None).await.expect("run B");
+                                "B-ran".to_string()
+                            }
+                            None => {
+                                // 与 refresh_one_inner 的 in-flight 跳过语义一致
+                                "B-skipped".to_string()
+                            }
+                        }
+                    },
+                );
+                assert_eq!(a, "A-ran");
+                assert_eq!(b, "B-skipped", "concurrent refresh must be skipped");
+            });
+
+        let content = std::fs::read_to_string(root.join("counter.txt")).unwrap();
+        assert_eq!(
+            content.lines().count(),
+            1,
+            "script must run exactly once, got {content:?}"
+        );
+
+        std::fs::remove_dir_all(root).ok();
+    }
+
+    #[test]
     fn find_node_locates_top_level_then_nested() {
         let nodes = tree();
         assert_eq!(
@@ -1283,7 +1698,7 @@ mod tests {
         // remote-bad-scheme: ftp:// → skip.
         // remote-off: on=false → skipped regardless of interval.
         // remote-file: file:// is allowed, last_ms=0 → due.
-        let due = collect_due_remote_ids(&tree(), 1_000_000);
+        let due = collect_due_remote_ids(&tree(), 1_000_000, &mut HashMap::new());
         assert_eq!(due, vec!["remote-1", "remote-2", "remote-file"]);
     }
 
@@ -1313,7 +1728,7 @@ mod tests {
         .as_array()
         .cloned()
         .unwrap();
-        assert!(collect_due_remote_ids(&nodes, 1_000_000).is_empty());
+        assert!(collect_due_remote_ids(&nodes, 1_000_000, &mut HashMap::new()).is_empty());
         assert!(collect_remote_ids(&nodes).is_empty());
     }
 
@@ -1324,10 +1739,118 @@ mod tests {
         let mut nodes = tree();
         let now_ms: i64 = 10_000_000;
         stamp_node(&mut nodes, "remote-2", "ignored", now_ms - 30_000);
-        let due = collect_due_remote_ids(&nodes, now_ms);
+        let due = collect_due_remote_ids(&nodes, now_ms, &mut HashMap::new());
         assert!(!due.contains(&"remote-2".into()));
         // remote-1 (last_ms=0) is still due.
         assert!(due.contains(&"remote-1".into()));
+    }
+
+    #[test]
+    fn is_failure_throttled_semantics() {
+        // 节流判定：仅「已重试 + 周期未结束」节流；首败未重试放行；
+        // 周期结束放行（由 collect 解锁新周期）。
+        let now: i64 = 10_000_000;
+        let rec = RefreshFailureRecord {
+            first_failed_ms: now - 5_000,
+            retried: false,
+        };
+        assert!(!is_failure_throttled(Some(&rec), now, 60));
+        let rec = RefreshFailureRecord {
+            first_failed_ms: now - 5_000,
+            retried: true,
+        };
+        assert!(is_failure_throttled(Some(&rec), now, 60));
+        assert!(!is_failure_throttled(Some(&rec), now + 60_000, 60));
+        assert!(!is_failure_throttled(None, now, 60));
+    }
+
+    #[test]
+    fn collect_due_retries_once_then_skips_until_interval() {
+        // 完整节流节奏（模拟扫描器多轮）：
+        // 首败 → 下次扫描重试一次 → 重试失败 → 周期内跳过 →
+        // interval 到期解锁 → 新周期重新开始。
+        let mut nodes = tree(); // remote-1: last_ms=0, interval=60s, on=true
+        let now_ms: i64 = 1_000_000;
+        let mut failures: HashMap<String, RefreshFailureRecord> = HashMap::new();
+
+        // 1. 首次扫描：无失败记录 → due（模拟刷新后失败）
+        let due = collect_due_remote_ids(&nodes, now_ms, &mut failures);
+        assert!(due.contains(&"remote-1".into()));
+
+        // 2. wrapper 落账「首败」
+        failures.insert(
+            "remote-1".into(),
+            RefreshFailureRecord {
+                first_failed_ms: now_ms,
+                retried: false,
+            },
+        );
+
+        // 3. 下一扫描（5s 后）：未重试 → 放行（这是唯一一次重试）
+        let due = collect_due_remote_ids(&nodes, now_ms + 5_000, &mut failures);
+        assert!(due.contains(&"remote-1".into()));
+
+        // 4. 重试也失败 → 标记已重试
+        failures.get_mut("remote-1").unwrap().retried = true;
+
+        // 5. 周期内（interval=60s 未满）：不再触发
+        let due = collect_due_remote_ids(&nodes, now_ms + 30_000, &mut failures);
+        assert!(
+            !due.contains(&"remote-1".into()),
+            "retried failure must be skipped inside the cycle"
+        );
+        let due = collect_due_remote_ids(&nodes, now_ms + 59_000, &mut failures);
+        assert!(!due.contains(&"remote-1".into()));
+
+        // 6. interval 到期：解锁并清除记录，恢复正常到期
+        let due = collect_due_remote_ids(&nodes, now_ms + 61_000, &mut failures);
+        assert!(
+            due.contains(&"remote-1".into()),
+            "after the cycle the node must be due again"
+        );
+        assert!(
+            failures.get("remote-1").is_none(),
+            "unlock must drop the record so the new cycle starts fresh"
+        );
+    }
+
+    #[test]
+    fn next_due_wait_ignores_throttled_node() {
+        // 节流中的节点不占用唤醒节奏（否则扫描器会为它提前醒来）。
+        let now: i64 = 10_000_000;
+        let nodes: Vec<Value> = json!([
+            {
+                "id": "r1", "type": "remote", "on": true,
+                "url": "https://example.com/a", "refresh_interval": 10,
+                "last_refresh_ms": 0, // never refreshed → due now (wait 0)
+            },
+        ])
+        .as_array()
+        .cloned()
+        .unwrap();
+
+        // 无记录 → 立即唤醒（0ms）
+        assert_eq!(next_due_wait_ms(&nodes, now, &HashMap::new()), Some(0));
+
+        // 节流中（已重试、周期内）→ 忽略 → None
+        let throttled = HashMap::from([(
+            "r1".into(),
+            RefreshFailureRecord {
+                first_failed_ms: now - 2_000,
+                retried: true,
+            },
+        )]);
+        assert_eq!(next_due_wait_ms(&nodes, now, &throttled), None);
+
+        // 首败未重试 → 不节流 → 仍按到期唤醒
+        let pending_retry = HashMap::from([(
+            "r1".into(),
+            RefreshFailureRecord {
+                first_failed_ms: now - 2_000,
+                retried: false,
+            },
+        )]);
+        assert_eq!(next_due_wait_ms(&nodes, now, &pending_retry), Some(0));
     }
 
     #[test]
@@ -1526,7 +2049,7 @@ mod tests {
         .as_array()
         .cloned()
         .unwrap();
-        assert_eq!(next_due_wait_ms(&nodes, now), Some(0));
+        assert_eq!(next_due_wait_ms(&nodes, now, &HashMap::new()), Some(0));
 
         // Drop the "due now" node: the earliest remaining is r1 at 5s.
         let nodes = json!([
@@ -1542,7 +2065,7 @@ mod tests {
         .as_array()
         .cloned()
         .unwrap();
-        assert_eq!(next_due_wait_ms(&nodes, now), Some(5_000));
+        assert_eq!(next_due_wait_ms(&nodes, now, &HashMap::new()), Some(5_000));
     }
 
     #[test]
@@ -1573,8 +2096,8 @@ mod tests {
         .as_array()
         .cloned()
         .unwrap();
-        assert_eq!(next_due_wait_ms(&nodes, now), None);
-        assert_eq!(next_due_wait_ms(&[], now), None);
+        assert_eq!(next_due_wait_ms(&nodes, now, &HashMap::new()), None);
+        assert_eq!(next_due_wait_ms(&[], now, &HashMap::new()), None);
     }
 
     #[test]

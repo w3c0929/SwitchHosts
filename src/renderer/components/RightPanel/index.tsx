@@ -26,7 +26,10 @@ const RightPanel = () => {
   const { currentHosts, hostsData, setCurrentHosts, isHostsInTrashcan, loadHostsData } =
     useHostsData()
   const [ruleCount, setRuleCount] = useState<number | null>(null)
-  const [isRefreshing, setIsRefreshing] = useState(false)
+  // 记录「正在刷新」的方案 id 而非布尔：刷新期间切换选中方案时，
+  // 另一个方案的按钮不会误变灰（旧实现是面板级布尔，A 刷新中切到 B，
+  // B 的刷新按钮被错误禁用）。
+  const [refreshingId, setRefreshingId] = useState<string | null>(null)
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false)
   const refLoadingId = useRef<string | null>(null)
 
@@ -137,7 +140,7 @@ const RightPanel = () => {
 
   const onRefresh = () => {
     if (!hosts || hosts.type !== 'remote') return
-    setIsRefreshing(true)
+    setRefreshingId(hosts.id)
     actions
       .refreshHosts(hosts.id)
       .then((r: IOperationResult) => {
@@ -166,7 +169,7 @@ const RightPanel = () => {
           message: getErrorMessage(e, lang.fail),
         })
       })
-      .finally(() => setIsRefreshing(false))
+      .finally(() => setRefreshingId(null))
   }
 
   if (!hosts) {
@@ -248,8 +251,8 @@ const RightPanel = () => {
                 size="compact-sm"
                 variant="light"
                 leftSection={<IconRefresh size={14} stroke={1.5} />}
-                loading={isRefreshing}
-                disabled={isRefreshing}
+                loading={refreshingId === hosts.id}
+                disabled={refreshingId === hosts.id}
                 onClick={onRefresh}
                 className={styles.refresh_btn}
               >

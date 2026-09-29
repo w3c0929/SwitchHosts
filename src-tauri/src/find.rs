@@ -820,6 +820,8 @@ mod tests {
             is_will_quit: AtomicBool::new(false),
             last_geometry_persist_ms: AtomicU64::new(0),
             refresh_wake: tokio::sync::Notify::new(),
+            inflight_refreshes: Mutex::new(std::collections::HashSet::new()),
+            refresh_failures: Mutex::new(std::collections::HashMap::new()),
             data_dir_recovery: None,
         }
     }

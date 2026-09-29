@@ -435,7 +435,13 @@ pub async fn set_list(state: State<'_, AppState>, args: Args) -> Result<Value, S
     };
     let _guard = state.store_lock.lock().expect("store lock poisoned");
     let mut m = load_manifest(&state).unwrap_or_default();
-    m.root = root;
+    // 防回退：前端（尤其手动刷新后）可能携带陈旧的 last_refresh_ms，
+    // 全量覆盖会把磁盘上更新的刷新时间戳退回旧值，导致扫描器误判
+    // 节点到期而重复刷新。保存前把磁盘上更新的时间戳恢复到新 root
+    // （只增不降，见 refresh::protect_last_refresh_against_stale）。
+    let mut new_root = root;
+    refresh::protect_last_refresh_against_stale(&m.root, &mut new_root);
+    m.root = new_root;
     save_manifest(&state, &m)?;
     // A list change may have enabled a remote scheme (or changed its
     // interval): wake the background refresh scanner so it re-evaluates

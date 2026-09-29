@@ -27,7 +27,8 @@ interface Props {
 
 const List = (props: Props) => {
   const { isTray } = props
-  const { hostsData, loadHostsData, setList, currentHosts, setCurrentHosts } = useHostsData()
+  const { hostsData, loadHostsData, setList, patchHostsNode, currentHosts, setCurrentHosts } =
+    useHostsData()
   const { configs } = useConfigs()
   const { lang } = useI18n()
   const [selectedIds, setSelectedIds] = useState<string[]>(
@@ -230,6 +231,19 @@ const List = (props: Props) => {
   )
 
   useOnBroadcast(events.reload_list, loadHostsData)
+
+  // 刷新成功事件：把后端最新节点形态合并回主树，保持 hostsData.list
+  // 与磁盘一致。手动刷新（refreshHosts）不广播 reload_list，若不同步，
+  // 之后任一次 setList 全量保存都会把陈旧的 last_refresh_ms 写回磁盘，
+  // 扫描器会误判到期而重复刷新。
+  useOnBroadcast(
+    events.hosts_refreshed,
+    (refreshed: IHostsListObject) => {
+      if (!refreshed?.id) return
+      patchHostsNode(refreshed)
+    },
+    [patchHostsNode],
+  )
 
   // 下载型方案完成/失败提示：成功通知每次触发都提示（用户明确要求），
     // 失败提示保留限频（60 秒）防止短间隔重试刷屏。
