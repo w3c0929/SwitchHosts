@@ -47,6 +47,8 @@ pub struct AppConfig {
     pub tray_mini_window: bool,
     pub lightweight_mode: bool,
     pub quit_on_close: bool,
+    /// 点击左侧方案列表项时是否自动滚动到该项。默认 false（不滚动）。
+    pub list_scroll_on_click: bool,
 
     // find window
     pub find_is_regexp: bool,
@@ -101,6 +103,7 @@ impl Default for AppConfig {
             tray_mini_window: true,
             lightweight_mode: false,
             quit_on_close: false,
+            list_scroll_on_click: false,
 
             find_is_regexp: false,
             find_is_ignore_case: false,
@@ -327,6 +330,24 @@ mod tests {
             .unwrap();
 
         assert!(cfg.quit_on_close);
+    }
+
+    #[test]
+    fn defaults_list_scroll_on_click_to_false() {
+        // 默认关闭 = 点击列表不自动滚动（保持列表位置不变）。
+        let cfg = AppConfig::default();
+
+        assert!(!cfg.list_scroll_on_click);
+    }
+
+    #[test]
+    fn apply_partial_accepts_list_scroll_on_click() {
+        let mut cfg = AppConfig::default();
+
+        cfg.apply_partial(&json!({ "list_scroll_on_click": true }))
+            .unwrap();
+
+        assert!(cfg.list_scroll_on_click);
     }
 
     #[test]

@@ -132,6 +132,9 @@ export default {
   lightweight_mode: '경량 모드',
   lightweight_mode_desc:
     '창을 닫을 때 프로세스를 종료하여 메모리를 확보합니다. 다시 열 때 약간 더 오래 걸립니다.',
+  list_scroll_on_click: '목록 클릭 시 자동 스크롤',
+  list_scroll_on_click_desc:
+    '켜면 왼쪽 목록의 항목을 클릭할 때 해당 항목이 보이도록 목록이 자동으로 스크롤됩니다. 끄면 목록 위치가 그대로 유지됩니다.',
   line: '줄',
   lines: '줄들',
   loading: '로딩 중...',

@@ -12,6 +12,7 @@ import SwitchButton from '@renderer/components/SwitchButton'
 import { actions, agent } from '@renderer/core/agent'
 import { PopupMenu } from '@renderer/core/PopupMenu'
 import useOnBroadcast from '@renderer/core/useOnBroadcast'
+import useConfigs from '@renderer/models/useConfigs'
 import useHostsData from '@renderer/models/useHostsData'
 import useI18n from '@renderer/models/useI18n'
 import { IconEdit } from '@tabler/icons-react'
@@ -30,6 +31,7 @@ const ListItem = (props: Props) => {
   const { data, isTray, selectedIds } = props
   const { lang, i18n } = useI18n()
   const { currentHosts, setCurrentHosts } = useHostsData()
+  const { configs } = useConfigs()
   const [isOn, setIsOn] = useState(data.on)
   // 同步显示「最后刷新」时间：手动/自动刷新都会广播 hosts_refreshed，
   // 让列表行的开关下方即时更新；列表重载时也从 data 还原。
@@ -76,6 +78,10 @@ const ListItem = (props: Props) => {
   )
 
   useEffect(() => {
+    // 点击列表项时是否自动滚动到选中项，由「点击列表时自动滚动」开关控制
+    //（默认关闭 = 不滚动，列表保持原地；开启才把选中项滚入可视区）。
+    if (!configs?.list_scroll_on_click) return
+
     const isSelected = data.id === currentHosts?.id
 
     if (isSelected && el.current) {
@@ -85,7 +91,7 @@ const ListItem = (props: Props) => {
         scrollMode: 'if-needed',
       })
     }
-  }, [data, currentHosts, el])
+  }, [data, currentHosts, el, configs?.list_scroll_on_click])
 
   const onSelect = () => {
     if (isTray) return

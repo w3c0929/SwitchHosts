@@ -191,6 +191,18 @@ const General = (props: IProps) => {
         </Group>
       </Box>
 
+      <Box w="100%">
+        <Group>
+          <Checkbox
+            checked={data.list_scroll_on_click}
+            onChange={(e) => onChange({ list_scroll_on_click: e.target.checked })}
+            label={lang.list_scroll_on_click}
+            description={lang.list_scroll_on_click_desc}
+            styles={checkboxDescriptionStyles}
+          />
+        </Group>
+      </Box>
+
       {platform === 'darwin' ? (
         <Box w="100%">
           <Group>

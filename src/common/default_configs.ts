@@ -39,6 +39,8 @@ const configs = {
   auto_check_update: true,
   lightweight_mode: false,
   quit_on_close: false,
+  // 点击左侧方案列表项时是否自动滚动到该项（默认关闭 = 不滚动）
+  list_scroll_on_click: false,
 
   // find window — sticky search options across reopens and restarts
   find_is_regexp: false,

@@ -139,6 +139,9 @@ const lang: LanguageDict = {
   lightweight_mode: 'Leichtgewichtiger Modus',
   lightweight_mode_desc:
     'Beim Schließen den Fensterprozess beenden, um Arbeitsspeicher freizugeben. Das erneute Öffnen dauert etwas länger.',
+  list_scroll_on_click: 'Automatisches Scrollen beim Klick auf die Liste',
+  list_scroll_on_click_desc:
+    'Wenn aktiviert, scrollt die linke Liste beim Anklicken eines Eintrags automatisch, sodass dieser sichtbar wird. Wenn deaktiviert, bleibt die Listenposition unverändert.',
   line: 'Zeile',
   lines: 'Zeilen',
   loading: 'Wird geladen...',

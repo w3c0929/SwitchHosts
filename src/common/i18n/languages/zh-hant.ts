@@ -130,6 +130,8 @@ const lang: LanguageDict = {
   launch_at_login: '開機自動啟動',
   lightweight_mode: '輕量模式',
   lightweight_mode_desc: '關閉視窗時銷毀渲染處理程序以釋放記憶體，重新開啟視窗會稍慢一些。',
+  list_scroll_on_click: '點擊列表時自動捲動',
+  list_scroll_on_click_desc: '開啟後，點擊左側方案列表中的某一項時，列表會自動捲動把該項顯示到可視區域；關閉則保持列表位置不變。',
   line: '行',
   lines: '行',
   loading: '載入中...',

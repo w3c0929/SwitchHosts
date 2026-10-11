@@ -55,6 +55,7 @@
     http_api_only_local: true,
     tray_mini_window: true,
     multi_chose_folder_switch_all: false,
+    list_scroll_on_click: false,
     auto_check_update: true,
     find_is_regexp: false,
     find_is_ignore_case: false,

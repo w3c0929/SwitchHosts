@@ -304,6 +304,42 @@ test.describe('preferences', () => {
     )
   })
 
+  test('list auto-scroll on click defaults off and saves immediately', async ({ page }) => {
+    await clearMockCalls(page)
+
+    await page.getByLabel('Settings').click()
+    await page.getByText('Preferences').click()
+    const preferences = page.getByRole('dialog')
+    await expect(preferences.getByText('General')).toBeVisible()
+
+    // Placed directly below "Hide at Launch".
+    const hideAtLaunch = preferences.getByLabel('Hide at Launch')
+    const listScroll = preferences.getByLabel('Auto-scroll on list click')
+    await expect(hideAtLaunch).toBeVisible()
+    await expect(listScroll).toBeVisible()
+
+    const hideBox = (await hideAtLaunch.boundingBox())!
+    const scrollBox = (await listScroll.boundingBox())!
+    expect(hideBox.y).toBeLessThan(scrollBox.y)
+
+    // Defaults off (clicking the list must not scroll by default).
+    await expect(listScroll).not.toBeChecked()
+
+    await listScroll.check()
+
+    await expect
+      .poll(async () => {
+        const state = await getMockState(page)
+        return state.configs.list_scroll_on_click
+      })
+      .toBe(true)
+
+    const calls = await getMockCalls(page)
+    expect(configPatches(calls)).toEqual(
+      expect.arrayContaining([expect.objectContaining({ list_scroll_on_click: true })]),
+    )
+  })
+
   test('automatic update checks default on and save immediately', async ({ page }) => {
     await clearMockCalls(page)
 

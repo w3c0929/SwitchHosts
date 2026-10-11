@@ -136,6 +136,9 @@ export default {
   lightweight_mode: 'Hafif Mod',
   lightweight_mode_desc:
     'Bellek boşaltmak için pencere kapatıldığında işlemi sonlandır. Yeniden açmak biraz daha uzun sürer.',
+  list_scroll_on_click: 'Liste tıklamasında otomatik kaydır',
+  list_scroll_on_click_desc:
+    'Açıkken, soldaki liste öğesine tıklandığında liste o öğeyi görünür kılmak için otomatik kayar. Kapalıyken liste konumu değişmez.',
   line: 'satır',
   lines: 'satırlar',
   loading: 'Yükleniyor...',

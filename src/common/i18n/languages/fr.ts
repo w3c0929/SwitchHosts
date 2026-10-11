@@ -139,6 +139,9 @@ const lang: LanguageDict = {
   lightweight_mode: 'Mode léger',
   lightweight_mode_desc:
     'Détruire le processus de la fenêtre à la fermeture pour libérer de la mémoire. La réouverture est un peu plus lente.',
+  list_scroll_on_click: 'Défilement automatique au clic sur la liste',
+  list_scroll_on_click_desc:
+    'Activé : cliquer sur un élément de la liste de gauche fait défiler la liste pour le rendre visible. Désactivé : la position de la liste reste inchangée.',
   line: 'ligne',
   lines: 'lignes',
   loading: 'Chargement...',

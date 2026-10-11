@@ -136,6 +136,9 @@ const lang: LanguageDict = {
   lightweight_mode: 'ライトウェイトモード',
   lightweight_mode_desc:
     'ウィンドウを閉じたときにプロセスを破棄してメモリを解放します。再度開く際に少し時間がかかります。',
+  list_scroll_on_click: 'リストクリック時に自動スクロール',
+  list_scroll_on_click_desc:
+    'オンにすると、左側の方案リストの項目をクリックしたときに、その項目が見えるようリストが自動スクロールします。オフの場合はリストの位置を保ちます。',
   line: '行',
   lines: '行',
   loading: '読み込み中...',

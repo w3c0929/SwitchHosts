@@ -137,6 +137,9 @@ export default {
   lightweight_mode: 'Tryb oszczędny',
   lightweight_mode_desc:
     'Zamknij proces okna przy zamknięciu, aby zwolnić pamięć. Ponowne otwarcie zajmie nieco więcej czasu.',
+  list_scroll_on_click: 'Automatyczne przewijanie przy kliknięciu listy',
+  list_scroll_on_click_desc:
+    'Po włączeniu kliknięcie elementu na liście po lewej przewija listę, aby pokazać ten element. Po wyłączeniu pozycja listy pozostaje bez zmian.',
   line: 'linia',
   lines: 'linie',
   loading: 'Ładowanie...',

@@ -130,6 +130,8 @@ const lang: LanguageDict = {
   launch_at_login: '开机自动启动',
   lightweight_mode: '轻量模式',
   lightweight_mode_desc: '关闭窗口时销毁渲染进程以释放内存，重新打开窗口会稍慢一些。',
+  list_scroll_on_click: '点击列表时自动滚动',
+  list_scroll_on_click_desc: '开启后，点击左侧方案列表中的某一项时，列表会自动滚动把该项显示到可视区域；关闭则保持列表位置不变。',
   line: '行',
   lines: '行',
   loading: '加载中...',

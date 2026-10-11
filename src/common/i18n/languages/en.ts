@@ -135,6 +135,9 @@ export default {
   lightweight_mode: 'Lightweight Mode',
   lightweight_mode_desc:
     'Destroy the window process when closed to free memory. Reopening takes slightly longer.',
+  list_scroll_on_click: 'Auto-scroll on list click',
+  list_scroll_on_click_desc:
+    'When on, clicking an entry in the left scheme list scrolls the list to bring that entry into view. When off, the list stays where it is.',
   line: 'line',
   lines: 'lines',
   loading: 'Loading...',
