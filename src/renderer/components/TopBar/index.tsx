@@ -5,11 +5,13 @@
 
 import logo from '@/assets/logo@4x.png'
 import events from '@common/events'
-import { ActionIcon, Badge, Box, Divider, Flex } from '@mantine/core'
+import { isMarkdownEntry } from '@common/markdown'
+import { ActionIcon, Badge, Box, Divider, Flex, SegmentedControl } from '@mantine/core'
 import ItemIcon from '@renderer/components/ItemIcon'
 import SwitchButton from '@renderer/components/SwitchButton'
 import { actions, agent } from '@renderer/core/agent'
 import useOnBroadcast from '@renderer/core/useOnBroadcast'
+import useConfigs from '@renderer/models/useConfigs'
 import useHostsData from '@renderer/models/useHostsData'
 import useI18n from '@renderer/models/useI18n'
 import {
@@ -37,7 +39,11 @@ const TopBar = (props: IProps) => {
   const { showLeftPanel, showRightPanel } = props
   const { lang } = useI18n()
   const { isHostsInTrashcan, currentHosts, isReadOnly } = useHostsData()
+  const { configs, updateConfigs } = useConfigs()
   const [isOn, setIsOn] = useState(!!currentHosts?.on)
+  // Markdown 条目才显示「预览 | 源码」切换；模式全局记住（配置项）。
+  const isMd = isMarkdownEntry(currentHosts)
+  const mdViewMode = configs?.md_view_mode === 'source' ? 'source' : 'preview'
   const iconSize = 20
   const iconStroke = 1.5
 
@@ -174,6 +180,22 @@ const TopBar = (props: IProps) => {
               }}
             />
           </Flex>
+        ) : null}
+        {isMd ? (
+          <SegmentedControl
+            size="xs"
+            aria-label="Markdown view mode"
+            value={mdViewMode}
+            onChange={(v) => {
+              updateConfigs({ md_view_mode: v as 'preview' | 'source' }).catch((e) =>
+                console.error(e),
+              )
+            }}
+            data={[
+              { value: 'preview', label: lang.preview },
+              { value: 'source', label: lang.source_code },
+            ]}
+          />
         ) : null}
         <ActionIcon
           aria-label="Toggle right panel"

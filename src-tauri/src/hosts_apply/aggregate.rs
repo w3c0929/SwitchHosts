@@ -67,11 +67,25 @@ fn collect_selected(
     Ok(())
 }
 
+/// 标题以 `.md` 结尾（不区分大小写）= Markdown 文档条目。
+/// 与前端 `isMarkdownTitle` 保持同一规则。
+fn is_markdown_title(title: &str) -> bool {
+    title.trim().to_lowercase().ends_with(".md")
+}
+
 fn is_on(node: &Value) -> bool {
     // 仅抓取/触发（as_hosts === false）的方案内容永远不进入系统 hosts，
     // 即使开关是开的。
     if node.get("as_hosts").and_then(Value::as_bool) == Some(false) {
         return false;
+    }
+    // Markdown 文档条目（标题 .md 结尾）永不进入系统 hosts：它的内容是
+    // 文档而非 hosts 规则。即使 as_hosts 缺省/为 true（旧配置或手动编辑
+    // manifest）也在此拦截。
+    if let Some(title) = node.get("title").and_then(Value::as_str) {
+        if is_markdown_title(title) {
+            return false;
+        }
     }
     // 脚本触发方案（file:// 指向本机 .ps1）同样永不进入系统 hosts：
     // 它的运行输出不是 hosts 内容。即使 as_hosts 缺省/为 true（旧配置或
@@ -234,5 +248,36 @@ mod tests {
         assert!(content.contains("127.0.0.1 a.com"));
         assert!(!content.contains("code"));
         std::fs::remove_dir_all(&paths.root).ok();
+    }
+
+    #[test]
+    fn markdown_titled_nodes_are_excluded_from_aggregation() {
+        let paths = temp_paths("markdown");
+        entries::write_entry(&paths.entries_dir, "md-node", "# Readme\n\nHello\n").unwrap();
+        entries::write_entry(&paths.entries_dir, "hosts-node", "127.0.0.1 a.com\n").unwrap();
+
+        // md-node: 标题 .md 结尾且 on=true、as_hosts 缺省（防御性拦截）。
+        let list = json!([
+            { "id": "md-node", "title": "readme.md", "type": "local", "on": true },
+            { "id": "hosts-node", "title": "Work", "type": "local", "on": true },
+        ])
+        .as_array()
+        .cloned()
+        .unwrap();
+
+        let content = aggregate_selected_content(&list, &paths, false).unwrap();
+
+        assert!(content.contains("127.0.0.1 a.com"));
+        assert!(!content.contains("# Readme"));
+        std::fs::remove_dir_all(&paths.root).ok();
+    }
+
+    #[test]
+    fn is_markdown_title_is_case_insensitive_and_trimmed() {
+        assert!(is_markdown_title("readme.md"));
+        assert!(is_markdown_title("README.MD"));
+        assert!(is_markdown_title("  notes.Md  "));
+        assert!(!is_markdown_title("hosts"));
+        assert!(!is_markdown_title("readme.md.hosts"));
     }
 }

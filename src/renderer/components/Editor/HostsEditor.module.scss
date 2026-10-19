@@ -84,6 +84,15 @@
   height: 100%;
 }
 
+.hidden {
+  display: none;
+}
+
+// Markdown 预览模式下渲染区自身负责背景与滚动。
+.md_preview {
+  background: var(--swh-editor-bg-color);
+}
+
 :global(.theme-dark) {
   .editor {
     :global(.cm-focused .cm-content) {

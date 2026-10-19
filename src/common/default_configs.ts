@@ -41,6 +41,8 @@ const configs = {
   quit_on_close: false,
   // 点击左侧方案列表项时是否自动滚动到该项（默认关闭 = 不滚动）
   list_scroll_on_click: false,
+  // Markdown 条目的查看模式（预览 / 源码），记住上次选择
+  md_view_mode: 'preview' as 'preview' | 'source',
 
   // find window — sticky search options across reopens and restarts
   find_is_regexp: false,

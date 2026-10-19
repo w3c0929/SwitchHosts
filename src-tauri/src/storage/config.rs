@@ -49,6 +49,8 @@ pub struct AppConfig {
     pub quit_on_close: bool,
     /// 点击左侧方案列表项时是否自动滚动到该项。默认 false（不滚动）。
     pub list_scroll_on_click: bool,
+    /// Markdown 条目的查看模式："preview"（默认）| "source"，记住上次选择。
+    pub md_view_mode: String,
 
     // find window
     pub find_is_regexp: bool,
@@ -104,6 +106,7 @@ impl Default for AppConfig {
             lightweight_mode: false,
             quit_on_close: false,
             list_scroll_on_click: false,
+            md_view_mode: "preview".to_string(),
 
             find_is_regexp: false,
             find_is_ignore_case: false,
@@ -134,6 +137,9 @@ impl AppConfig {
         }
         if !matches!(self.proxy_protocol.as_str(), "http" | "https" | "socks5") {
             self.proxy_protocol = "http".to_string();
+        }
+        if !matches!(self.md_view_mode.as_str(), "preview" | "source") {
+            self.md_view_mode = "preview".to_string();
         }
         if self.proxy_port > MAX_PROXY_PORT {
             self.proxy_port = MAX_PROXY_PORT;
@@ -330,6 +336,33 @@ mod tests {
             .unwrap();
 
         assert!(cfg.quit_on_close);
+    }
+
+    #[test]
+    fn defaults_md_view_mode_to_preview() {
+        let cfg = AppConfig::default();
+
+        assert_eq!(cfg.md_view_mode, "preview");
+    }
+
+    #[test]
+    fn apply_partial_accepts_md_view_mode() {
+        let mut cfg = AppConfig::default();
+
+        cfg.apply_partial(&json!({ "md_view_mode": "source" }))
+            .unwrap();
+
+        assert_eq!(cfg.md_view_mode, "source");
+    }
+
+    #[test]
+    fn md_view_mode_normalizes_unknown_values_to_preview() {
+        let mut cfg = AppConfig::default();
+
+        cfg.apply_partial(&json!({ "md_view_mode": "bogus" }))
+            .unwrap();
+
+        assert_eq!(cfg.md_view_mode, "preview");
     }
 
     #[test]

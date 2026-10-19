@@ -6,8 +6,10 @@
 import { FolderModeType, HostsType, IHostsListObject } from '@common/data'
 import events from '@common/events'
 import * as hostsFn from '@common/hostsFn'
+import { isMarkdownTitle } from '@common/markdown'
 import {
   ActionIcon,
+  Badge,
   Box,
   Button,
   Group,
@@ -112,6 +114,10 @@ const EditHostsInfo = () => {
     if (isScriptTriggerUrl(data.url) && data.type === 'remote') {
       data.as_hosts = false
     }
+    // Markdown 文档条目（标题 .md 结尾）永不进入系统 hosts。
+    if (isMarkdownTitle(data.title)) {
+      data.as_hosts = false
+    }
 
     const keysToTrim = ['title', 'url']
     keysToTrim.map((k) => {
@@ -154,6 +160,10 @@ const EditHostsInfo = () => {
     // 脚本触发型 URL（file:// + .ps1）：永远按触发型方案运行——
     // 刷新时执行脚本，输出不进入系统 hosts 管线，因此强制 as_hosts=false。
     if (kv.url !== undefined && isScriptTriggerUrl(kv.url) && obj.type === 'remote') {
+      obj.as_hosts = false
+    }
+    // Markdown 文档条目：内容不进入系统 hosts 管线，强制 as_hosts=false。
+    if (isMarkdownTitle(obj.title)) {
       obj.as_hosts = false
     }
     setHosts(obj)
@@ -213,6 +223,7 @@ const EditHostsInfo = () => {
   }
 
   const forRemote = (): React.ReactElement => {
+    const isMd = isMarkdownTitle(hosts?.title)
     const interval = hosts?.refresh_interval || 0
     const isPreset = REFRESH_PRESETS.includes(interval)
     const selectValue = isPreset ? interval.toString() : interval > 0 ? 'custom' : '0'
@@ -376,11 +387,13 @@ const EditHostsInfo = () => {
           <Text mb="8px">{lang.as_hosts}</Text>
           <Switch
             aria-label={lang.as_hosts}
-            checked={hosts?.as_hosts !== false}
-            disabled={isScriptTriggerUrl(hosts?.url)}
+            checked={hosts?.as_hosts !== false && !isMd}
+            disabled={isScriptTriggerUrl(hosts?.url) || isMd}
             onChange={(e) => onUpdate({ as_hosts: e.currentTarget.checked })}
           />
-          <DescriptionText mt="8px">{lang.as_hosts_desc}</DescriptionText>
+          <DescriptionText mt="8px">
+            {isMd ? lang.md_entry_desc : lang.as_hosts_desc}
+          </DescriptionText>
         </Box>
 
         <Box className={styles.ln}>
@@ -678,6 +691,16 @@ const EditHostsInfo = () => {
             }
             onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => e.key === 'Enter' && onSave()}
           />
+          {isMarkdownTitle(hosts?.title) ? (
+            <Group gap="6px" mt="8px" align="center">
+              <Badge color="blue" variant="light" size="sm">
+                Markdown
+              </Badge>
+              <Text size="xs" c="dimmed">
+                {lang.md_entry_desc}
+              </Text>
+            </Group>
+          ) : null}
         </Box>
 
         {hosts?.type === 'remote' ? forRemote() : null}

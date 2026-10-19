@@ -19,6 +19,7 @@ import {
   type ViewUpdate,
 } from '@codemirror/view'
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands'
+import { markdown } from '@codemirror/lang-markdown'
 import { isHostsCommentLine, isValidHostsLine } from './hosts_highlight'
 
 const IP_RE = /^(\s*)([\w.:%]+)/
@@ -112,6 +113,8 @@ export interface BuildExtensionsOptions {
   initialReadOnly: boolean
   onDocChange: (next: string) => void
   onGutterClick: (lineIndex: number) => void
+  /** Markdown 源码模式：启用 Markdown 语法高亮，关闭 hosts 专用高亮与行号点击注释。 */
+  markdown?: boolean
 }
 
 export interface BuiltExtensions {
@@ -123,24 +126,31 @@ export function buildExtensions({
   initialReadOnly,
   onDocChange,
   onGutterClick,
+  markdown: isMarkdown = false,
 }: BuildExtensionsOptions): BuiltExtensions {
   const readOnlyCompartment = new Compartment()
 
+  const gutter = isMarkdown
+    ? lineNumbers()
+    : lineNumbers({
+        domEventHandlers: {
+          mousedown(view, line, event) {
+            // CM 6 Line.number is 1-based; our toggleCommentByLine wants 0-based.
+            const lineIdx = view.state.doc.lineAt(line.from).number - 1
+            onGutterClick(lineIdx)
+            ;(event as MouseEvent).preventDefault()
+            return true
+          },
+        },
+      })
+
   const extensions: Extension[] = [
     history(),
-    lineNumbers({
-      domEventHandlers: {
-        mousedown(view, line, event) {
-          // CM 6 Line.number is 1-based; our toggleCommentByLine wants 0-based.
-          const lineIdx = view.state.doc.lineAt(line.from).number - 1
-          onGutterClick(lineIdx)
-          ;(event as MouseEvent).preventDefault()
-          return true
-        },
-      },
-    }),
+    gutter,
     keymap.of([...defaultKeymap, ...historyKeymap]),
-    hostsHighlighter,
+    // md 源码用 Markdown 语法高亮；hosts 专用的注释/IP/错误高亮只在
+    // 普通 hosts 条目启用（否则 Markdown 文本会被全量标红）。
+    isMarkdown ? markdown() : hostsHighlighter,
     hostsTheme,
     EditorView.updateListener.of((u) => {
       if (u.docChanged) onDocChange(u.state.doc.toString())

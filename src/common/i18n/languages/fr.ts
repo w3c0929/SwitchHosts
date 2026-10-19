@@ -147,6 +147,7 @@ const lang: LanguageDict = {
   loading: 'Chargement...',
   local: 'Local',
   match: 'Correspondance',
+  md_entry_desc: "Un titre se terminant par .md est traité comme un document Markdown (aperçu par défaut, bascule vers la source possible). Son contenu n'est jamais écrit dans le fichier hosts système.",
   migrate_confirm:
     'SwitchHosts v4.0 utilise un nouveau format de stockage des données, voulez-vous migrer les anciennes données dans ce nouveau format ?',
   migrate_data: 'Migrer les données',
@@ -184,6 +185,7 @@ const lang: LanguageDict = {
   paste: 'Coller',
   port: 'Port',
   preferences: 'Préférences',
+  preview: 'Aperçu',
   previous: 'Précédent',
   protocol: 'Protocole',
   proxy: 'Proxy',

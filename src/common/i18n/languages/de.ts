@@ -147,6 +147,7 @@ const lang: LanguageDict = {
   loading: 'Wird geladen...',
   local: 'Lokal',
   match: 'Übereinstimmung',
+  md_entry_desc: 'Ein Titel auf .md wird als Markdown-Dokument behandelt (standardmäßig Vorschau, Quelltext umschaltbar). Der Inhalt wird nie in die System-Hosts geschrieben.',
   migrate_confirm:
     'SwitchHosts v4.0 verwendet ein neues Datenspeicherformat, möchten Sie alte Daten in das neue Format migrieren?',
   migrate_data: 'Daten migrieren',
@@ -184,6 +185,7 @@ const lang: LanguageDict = {
   paste: 'Einfügen',
   port: 'Anschluss',
   preferences: 'Einstellungen',
+  preview: 'Vorschau',
   previous: 'Vorhergehend',
   protocol: 'Protokoll',
   proxy: 'Proxy',

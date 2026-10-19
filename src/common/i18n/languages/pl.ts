@@ -145,6 +145,7 @@ export default {
   loading: 'Ładowanie...',
   local: 'Lokalny',
   match: 'Dopasuj',
+  md_entry_desc: 'Tytuł kończący się na .md jest traktowany jako dokument Markdown (domyślnie podgląd, możliwość przełączenia na źródło). Zawartość nigdy nie trafia do systemowego pliku hosts.',
   migrate_confirm:
     'SwitchHosts v4.0 używa nowego formatu przechowywania danych, czy chcesz migrować stare dane do nowego formatu?',
   migrate_data: 'Migruj dane',
@@ -182,6 +183,7 @@ export default {
   paste: 'Wklej',
   port: 'Port',
   preferences: 'Preferencje',
+  preview: 'Podgląd',
   previous: 'Wstecz',
   protocol: 'Protokół',
   proxy: 'Proxy',

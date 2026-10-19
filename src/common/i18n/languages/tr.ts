@@ -144,6 +144,7 @@ export default {
   loading: 'Yükleniyor...',
   local: 'Yerel',
   match: 'Eşleşme',
+  md_entry_desc: 'Başlığı .md ile biten öğeler Markdown belgesi olarak işlenir (varsayılan önizleme, kaynağa geçilebilir). İçeriği sistem hosts dosyasına asla yazılmaz.',
   migrate_confirm:
     'SwitchHosts v4.0 yeni bir veri depolama formatı kullanıyor, eski verileri yeni formata taşımak ister misiniz?',
   migrate_data: 'Veri taşı',
@@ -181,6 +182,7 @@ export default {
   paste: 'Yapıştır',
   port: 'Port',
   preferences: 'Tercihler',
+  preview: 'Önizleme',
   previous: 'Önceki',
   protocol: 'Protokol',
   proxy: 'Proxy',

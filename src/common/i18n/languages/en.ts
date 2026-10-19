@@ -143,6 +143,7 @@ export default {
   loading: 'Loading...',
   local: 'Local',
   match: 'Match',
+  md_entry_desc: 'A title ending in .md is treated as a Markdown document (preview by default, switchable to source). Its content never goes into the system hosts file.',
   migrate_confirm:
     'SwitchHosts v4.0 uses a new data storage format, do you want to migrate old data to the new format?',
   migrate_data: 'Migrate Data',
@@ -180,6 +181,7 @@ export default {
   paste: 'Paste',
   port: 'Port',
   preferences: 'Preferences',
+  preview: 'Preview',
   previous: 'Previous',
   protocol: 'Protocol',
   proxy: 'Proxy',

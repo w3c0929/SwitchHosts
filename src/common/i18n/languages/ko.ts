@@ -140,6 +140,7 @@ export default {
   loading: '로딩 중...',
   local: '로컬',
   match: '일치',
+  md_entry_desc: '제목이 .md로 끝나는 항목은 Markdown 문서로 처리됩니다(기본 미리보기, 소스 전환 가능). 내용은 시스템 hosts에 기록되지 않습니다.',
   migrate_confirm:
     'SwitchHosts v4.0는 새로운 데이터 저장 형식을 사용합니다. 이전 데이터를 새 형식으로 마이그레이션(이전)하시겠습니까?',
   migrate_data: '데이터 이전',
@@ -176,6 +177,7 @@ export default {
   paste: '붙여넣기',
   port: '포트',
   preferences: '설정',
+  preview: '미리보기',
   previous: '이전',
   protocol: '프로토콜',
   proxy: '프록시',

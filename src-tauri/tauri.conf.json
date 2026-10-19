@@ -14,8 +14,8 @@
     "macOSPrivateApi": true,
     "windows": [],
     "security": {
-      "csp": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' asset: data:; font-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'none'",
-      "devCsp": "default-src 'self' http://127.0.0.1:8220; script-src 'self' 'wasm-unsafe-eval' http://127.0.0.1:8220; style-src 'self' 'unsafe-inline' http://127.0.0.1:8220; img-src 'self' asset: data: http://127.0.0.1:8220; font-src 'self' data: http://127.0.0.1:8220; connect-src 'self' ipc: http://ipc.localhost ws://127.0.0.1:8220 http://127.0.0.1:8220; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'none'"
+      "csp": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' asset: data: https:; font-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'none'",
+      "devCsp": "default-src 'self' http://127.0.0.1:8220; script-src 'self' 'wasm-unsafe-eval' http://127.0.0.1:8220; style-src 'self' 'unsafe-inline' http://127.0.0.1:8220; img-src 'self' asset: data: https: http://127.0.0.1:8220; font-src 'self' data: http://127.0.0.1:8220; connect-src 'self' ipc: http://ipc.localhost ws://127.0.0.1:8220 http://127.0.0.1:8220; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'none'"
     }
   },
   "bundle": {

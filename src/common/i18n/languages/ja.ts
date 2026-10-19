@@ -144,6 +144,7 @@ const lang: LanguageDict = {
   loading: '読み込み中...',
   local: 'ローカル',
   match: '一致',
+  md_entry_desc: 'タイトルが .md で終わる場合：Markdown 文書として扱われ（既定ではプレビュー表示、ソースに切替可能）、内容がシステム hosts に書き込まれることはありません。',
   migrate_confirm:
     'SwitchHosts v4.0は新しいデータ保存形式を使用します。古いデータを新しい形式に移行しますか？',
   migrate_data: 'データ移行',
@@ -181,6 +182,7 @@ const lang: LanguageDict = {
   paste: '貼り付け',
   port: 'ポート',
   preferences: '設定',
+  preview: 'プレビュー',
   previous: '前へ',
   protocol: 'プロトコル',
   proxy: 'プロキシ',

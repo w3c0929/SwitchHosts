@@ -5,11 +5,13 @@
 
 import { IHostsListObject } from '@common/data'
 import events from '@common/events'
+import { isMarkdownEntry } from '@common/markdown'
 import { normalizeLineEndings } from '@common/newlines'
 import { IFindShowSourceParam } from '@common/types'
 import StatusBar from '@renderer/components/StatusBar'
 import { actions, agent } from '@renderer/core/agent'
 import useOnBroadcast from '@renderer/core/useOnBroadcast'
+import useConfigs from '@renderer/models/useConfigs'
 import useHostsData from '@renderer/models/useHostsData'
 import { EditorState } from '@codemirror/state'
 import { EditorView } from '@codemirror/view'
@@ -23,13 +25,19 @@ import {
 } from './hosts_cm'
 import { toggleCommentByLine, toggleCommentBySelection } from './hosts_highlight'
 import styles from './HostsEditor.module.scss'
+import MarkdownPreview from './MarkdownPreview'
 
 const HostsEditor = () => {
   const { currentHosts, isReadOnly } = useHostsData()
+  const { configs } = useConfigs()
   const hostsId = currentHosts?.id || '0'
   const readOnly = isReadOnly(currentHosts)
   // 控制右侧编辑器是否显示内容（默认开；用户可在编辑表单中关闭）
   const showContent = currentHosts?.show_content !== false
+  // 标题以 .md 结尾 = Markdown 条目：默认显示预览，可切换源码编辑。
+  const isMd = isMarkdownEntry(currentHosts)
+  const mdViewMode = configs?.md_view_mode === 'source' ? 'source' : 'preview'
+  const showMdPreview = isMd && mdViewMode === 'preview'
   const [content, setContent] = useState('')
 
   const refMount = useRef<HTMLDivElement>(null)
@@ -41,6 +49,7 @@ const HostsEditor = () => {
   const refHostsId = useRef(hostsId)
   const refReadOnly = useRef(readOnly)
   const refShowContent = useRef(showContent)
+  const refIsMd = useRef(isMd)
   // Pending find: when a show_source event arrives before the target hosts is loaded
   // (List broadcasts select_hosts then show_source synchronously, but hostsId only
   // updates on the next render), we stash the params here and apply them once
@@ -79,6 +88,10 @@ const HostsEditor = () => {
     refShowContent.current = showContent
   }, [showContent])
 
+  useEffect(() => {
+    refIsMd.current = isMd
+  }, [isMd])
+
   const { run: toSave } = useDebounceFn(
     (id: string, nextContent: string) => {
       actions
@@ -115,6 +128,8 @@ const HostsEditor = () => {
 
   const toggleComment = () => {
     if (refReadOnly.current) return
+    // Markdown 源码没有 hosts 注释语义，跳过。
+    if (refIsMd.current) return
     const view = refView.current
     if (!view) return
     // Skip while an IME composition is active to avoid dropping characters.
@@ -160,6 +175,7 @@ const HostsEditor = () => {
       initialReadOnly: refReadOnly.current,
       onDocChange,
       onGutterClick,
+      markdown: refIsMd.current,
     })
 
   const refreshEditorLayout = (view: EditorView) => {
@@ -238,11 +254,19 @@ const HostsEditor = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Load content when the active hosts changes or show_content toggles.
+  // Load content when the active hosts changes, show_content toggles, or the
+  // entry flips between Markdown / hosts (rebuild extensions for the new mode).
   useEffect(() => {
     loadContent(hostsId).catch((e) => console.error(e))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hostsId, showContent])
+  }, [hostsId, showContent, isMd])
+
+  // 从预览切回源码时，编辑器此前处于 display:none，需要重新测量布局。
+  useEffect(() => {
+    if (showMdPreview) return
+    const view = refView.current
+    if (view) refreshEditorLayout(view)
+  }, [showMdPreview, isMd])
 
   // Reconfigure read-only state via the compartment without rebuilding the editor.
   useEffect(() => {
@@ -316,8 +340,15 @@ const HostsEditor = () => {
 
   return (
     <div className={styles.root}>
-      <div className={clsx(styles.editor, readOnly && styles.read_only)}>
-        <div ref={refMount} className={styles.mount} />
+      <div
+        className={clsx(
+          styles.editor,
+          readOnly && styles.read_only,
+          showMdPreview && styles.md_preview,
+        )}
+      >
+        <div ref={refMount} className={clsx(styles.mount, showMdPreview && styles.hidden)} />
+        {showMdPreview ? <MarkdownPreview content={content} /> : null}
       </div>
 
       <StatusBar
