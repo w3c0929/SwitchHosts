@@ -144,6 +144,11 @@ export default {
   local: 'Local',
   match: 'Match',
   md_entry_desc: 'A title ending in .md is treated as a Markdown document (preview by default, switchable to source). Its content never goes into the system hosts file.',
+  md_file_read_failed: 'Failed to read the local Markdown file',
+  md_file_write_failed: 'Failed to save the local Markdown file',
+  md_local_file: 'Local file',
+  md_open_file: 'Open local Markdown document',
+  md_open_file_desc: 'Pick a local .md file: it is added to the left list as its own entry and edits are saved back to the original file.',
   migrate_confirm:
     'SwitchHosts v4.0 uses a new data storage format, do you want to migrate old data to the new format?',
   migrate_data: 'Migrate Data',

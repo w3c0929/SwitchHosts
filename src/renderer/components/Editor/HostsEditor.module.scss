@@ -93,6 +93,37 @@
   background: var(--swh-editor-bg-color);
 }
 
+// 关联本地 md 文件读取失败（文件被移动/删除等）。
+.md_error {
+  height: 100%;
+  padding: 24px;
+  box-sizing: border-box;
+  overflow: auto;
+  background: var(--swh-editor-bg-color);
+  color: var(--swh-editor-text-color);
+}
+
+.md_error_title {
+  font-weight: 600;
+  color: var(--swh-editor-error);
+  margin-bottom: 10px;
+}
+
+.md_error_path {
+  font-family: common.$font-editor;
+  font-size: 0.85em;
+  opacity: 0.85;
+  word-break: break-all;
+  margin-bottom: 8px;
+}
+
+.md_error_message {
+  font-size: 0.85em;
+  opacity: 0.7;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
 :global(.theme-dark) {
   .editor {
     :global(.cm-focused .cm-content) {

@@ -10,9 +10,11 @@ import { normalizeLineEndings } from '@common/newlines'
 import { IFindShowSourceParam } from '@common/types'
 import StatusBar from '@renderer/components/StatusBar'
 import { actions, agent } from '@renderer/core/agent'
+import { showErrorNotification } from '@renderer/core/notify'
 import useOnBroadcast from '@renderer/core/useOnBroadcast'
 import useConfigs from '@renderer/models/useConfigs'
 import useHostsData from '@renderer/models/useHostsData'
+import useI18n from '@renderer/models/useI18n'
 import { EditorState } from '@codemirror/state'
 import { EditorView } from '@codemirror/view'
 import { useDebounceFn } from 'ahooks'
@@ -30,15 +32,20 @@ import MarkdownPreview from './MarkdownPreview'
 const HostsEditor = () => {
   const { currentHosts, isReadOnly } = useHostsData()
   const { configs } = useConfigs()
+  const { lang } = useI18n()
   const hostsId = currentHosts?.id || '0'
   const readOnly = isReadOnly(currentHosts)
   // 控制右侧编辑器是否显示内容（默认开；用户可在编辑表单中关闭）
   const showContent = currentHosts?.show_content !== false
-  // 标题以 .md 结尾 = Markdown 条目：默认显示预览，可切换源码编辑。
+  // 标题以 .md 结尾或关联了本地 md 文件 = Markdown 条目：
+  // 默认显示预览，可切换到编辑视图。
   const isMd = isMarkdownEntry(currentHosts)
+  // 关联本地文件时，内容直接读写该文件（源文件为准）。
+  const mdPath = (currentHosts?.md_path || '').trim()
   const mdViewMode = configs?.md_view_mode === 'source' ? 'source' : 'preview'
   const showMdPreview = isMd && mdViewMode === 'preview'
   const [content, setContent] = useState('')
+  const [mdLoadError, setMdLoadError] = useState<string | null>(null)
 
   const refMount = useRef<HTMLDivElement>(null)
   const refView = useRef<EditorView | null>(null)
@@ -50,6 +57,9 @@ const HostsEditor = () => {
   const refReadOnly = useRef(readOnly)
   const refShowContent = useRef(showContent)
   const refIsMd = useRef(isMd)
+  const refMdPath = useRef(mdPath)
+  // 本地 md 文件原始换行风格：保存时还原，避免把 CRLF 文件改成 LF。
+  const refMdEol = useRef<'lf' | 'crlf'>('lf')
   // Pending find: when a show_source event arrives before the target hosts is loaded
   // (List broadcasts select_hosts then show_source synchronously, but hostsId only
   // updates on the next render), we stash the params here and apply them once
@@ -92,8 +102,31 @@ const HostsEditor = () => {
     refIsMd.current = isMd
   }, [isMd])
 
+  useEffect(() => {
+    refMdPath.current = mdPath
+  }, [mdPath])
+
   const { run: toSave } = useDebounceFn(
-    (id: string, nextContent: string) => {
+    (id: string, nextContent: string, mdFilePath: string) => {
+      if (mdFilePath) {
+        // 关联本地文件：写回原文件（保持原有换行风格），同时同步内部
+        // 缓存，供查找/导出等仍以缓存为数据源的路径使用。
+        const payload =
+          refMdEol.current === 'crlf' ? nextContent.replace(/\n/g, '\r\n') : nextContent
+        actions
+          .writeMdFile(mdFilePath, payload)
+          .catch((e) =>
+            showErrorNotification({
+              title: lang.md_file_write_failed,
+              message: `${mdFilePath}\n${String((e as Error)?.message || e)}`,
+            }),
+          )
+        actions
+          .setHostsContent(id, nextContent)
+          .then(() => agent.broadcast(events.hosts_content_changed, id))
+          .catch((e) => console.error(e))
+        return
+      }
       actions
         .setHostsContent(id, nextContent)
         .then(() => agent.broadcast(events.hosts_content_changed, id))
@@ -105,7 +138,8 @@ const HostsEditor = () => {
   const onDocChange = (nextContent: string) => {
     const normalizedContent = normalizeLineEndings(nextContent)
     setContent(normalizedContent)
-    toSave(refHostsId.current, normalizedContent)
+    // 快照当前路径：切换条目后防抖回调仍写回原文件。
+    toSave(refHostsId.current, normalizedContent, refMdPath.current)
   }
 
   const onGutterClick = (lineIndex: number) => {
@@ -214,18 +248,38 @@ const HostsEditor = () => {
     // show_content 关闭时，编辑器清空不加载内容
     if (targetHostsId !== '0' && !refShowContent.current) {
       setContent('')
+      setMdLoadError(null)
       const view = createEditorView('')
       if (view) refreshEditorLayout(view)
       return
     }
 
-    const nextContent = normalizeLineEndings(
-      targetHostsId === '0'
-        ? await actions.getSystemHosts()
-        : await actions.getHostsContent(targetHostsId),
-    )
+    let rawContent: string
+    try {
+      if (targetHostsId === '0') {
+        rawContent = await actions.getSystemHosts()
+      } else if (refMdPath.current) {
+        // 关联本地 md：以磁盘文件内容为准（记录原换行风格）。
+        rawContent = await actions.readMdFile(refMdPath.current)
+        refMdEol.current = rawContent.includes('\r\n') ? 'crlf' : 'lf'
+      } else {
+        rawContent = await actions.getHostsContent(targetHostsId)
+      }
+    } catch (e) {
+      if (refHostsId.current !== targetHostsId) return
+      // 文件缺失/不可读：显示错误态，不再把错误文本当作可编辑内容，
+      // 避免误操作覆盖原文件。
+      setMdLoadError(String((e as Error)?.message || e))
+      setContent('')
+      const view = createEditorView('')
+      if (view) refreshEditorLayout(view)
+      return
+    }
 
     if (refHostsId.current !== targetHostsId) return
+
+    setMdLoadError(null)
+    const nextContent = normalizeLineEndings(rawContent)
 
     setContent(nextContent)
     const view = createEditorView(nextContent)
@@ -261,12 +315,12 @@ const HostsEditor = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hostsId, showContent, isMd])
 
-  // 从预览切回源码时，编辑器此前处于 display:none，需要重新测量布局。
+  // 从预览/错误态切回编辑时，编辑器此前处于 display:none，需要重新测量布局。
   useEffect(() => {
-    if (showMdPreview) return
+    if (showMdPreview || mdLoadError) return
     const view = refView.current
     if (view) refreshEditorLayout(view)
-  }, [showMdPreview, isMd])
+  }, [showMdPreview, isMd, mdLoadError])
 
   // Reconfigure read-only state via the compartment without rebuilding the editor.
   useEffect(() => {
@@ -347,8 +401,22 @@ const HostsEditor = () => {
           showMdPreview && styles.md_preview,
         )}
       >
-        <div ref={refMount} className={clsx(styles.mount, showMdPreview && styles.hidden)} />
-        {showMdPreview ? <MarkdownPreview content={content} /> : null}
+        <div
+          ref={refMount}
+          className={clsx(
+            styles.mount,
+            (showMdPreview || mdLoadError) && styles.hidden,
+          )}
+        />
+        {mdLoadError ? (
+          <div className={styles.md_error}>
+            <div className={styles.md_error_title}>{lang.md_file_read_failed}</div>
+            <div className={styles.md_error_path}>{mdPath}</div>
+            <div className={styles.md_error_message}>{mdLoadError}</div>
+          </div>
+        ) : showMdPreview ? (
+          <MarkdownPreview content={content} />
+        ) : null}
       </div>
 
       <StatusBar

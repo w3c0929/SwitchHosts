@@ -26,13 +26,13 @@ test.describe('markdown entries', () => {
       .toBe(false)
 
     // Top bar gains the Preview / Source Code switch, defaulting to preview.
-    await expect(page.getByText('Preview', { exact: true })).toBeVisible()
-    await expect(page.getByText('Source Code', { exact: true })).toBeVisible()
+    await expect(page.getByTestId('md-view-toggle').getByText('Preview', { exact: true })).toBeVisible()
+    await expect(page.getByTestId('md-view-toggle').getByText('Edit', { exact: true })).toBeVisible()
     // Default preview → the raw editor stays hidden.
     await expect(page.locator('.cm-content')).not.toBeVisible()
 
     // Switch to source and write Markdown.
-    await page.getByText('Source Code', { exact: true }).click()
+    await page.getByTestId('md-view-toggle').getByText('Edit', { exact: true }).click()
     const editor = page.locator('.cm-content')
     await expect(editor).toBeVisible()
     await editor.click()
@@ -55,7 +55,7 @@ test.describe('markdown entries', () => {
       .toBe(true)
 
     // Back to preview → rendered Markdown (heading + emphasis), editor hidden.
-    await page.getByText('Preview', { exact: true }).click()
+    await page.getByTestId('md-view-toggle').getByText('Preview', { exact: true }).click()
     await expect(page.locator('.cm-content')).not.toBeVisible()
     const preview = page.getByTestId('markdown-preview')
     await expect(preview.locator('h1')).toContainText('Hello MD')
@@ -63,7 +63,7 @@ test.describe('markdown entries', () => {
 
     // Non-Markdown entries keep the plain hosts editor and hide the switch.
     await page.locator('[data-id="local-api"]').click()
-    await expect(page.getByText('Source Code', { exact: true })).toHaveCount(0)
+    await expect(page.getByTestId('md-view-toggle').getByText('Edit', { exact: true })).toHaveCount(0)
     await expect(page.locator('.cm-content')).toBeVisible()
   })
 
@@ -80,17 +80,17 @@ test.describe('markdown entries', () => {
 
     // The previous test finished in source mode, but tests run in isolation:
     // start from whatever mode is current, then force source via the control.
-    await page.getByText('Source Code', { exact: true }).click()
+    await page.getByTestId('md-view-toggle').getByText('Edit', { exact: true }).click()
     const editor = page.locator('.cm-content')
     await expect(editor).toBeVisible()
     await editor.click()
     await page.keyboard.type('# Second')
     await page.waitForTimeout(1400)
 
-    await page.getByText('Preview', { exact: true }).click()
+    await page.getByTestId('md-view-toggle').getByText('Preview', { exact: true }).click()
     await expect(page.getByTestId('markdown-preview').locator('h1')).toContainText('Second')
 
-    await page.getByText('Source Code', { exact: true }).click()
+    await page.getByTestId('md-view-toggle').getByText('Edit', { exact: true }).click()
     await expect(editor).toBeVisible()
     // Editable after the round trip.
     await editor.click()

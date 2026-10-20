@@ -148,6 +148,11 @@ const lang: LanguageDict = {
   local: 'Lokal',
   match: 'Übereinstimmung',
   md_entry_desc: 'Ein Titel auf .md wird als Markdown-Dokument behandelt (standardmäßig Vorschau, Quelltext umschaltbar). Der Inhalt wird nie in die System-Hosts geschrieben.',
+  md_file_read_failed: 'Lokale Markdown-Datei konnte nicht gelesen werden',
+  md_file_write_failed: 'Lokale Markdown-Datei konnte nicht gespeichert werden',
+  md_local_file: 'Lokale Datei',
+  md_open_file: 'Lokales Markdown-Dokument öffnen',
+  md_open_file_desc: 'Lokale .md-Datei wählen: wird als eigener Eintrag in die linke Liste aufgenommen; Änderungen werden in die Originaldatei zurückgespeichert.',
   migrate_confirm:
     'SwitchHosts v4.0 verwendet ein neues Datenspeicherformat, möchten Sie alte Daten in das neue Format migrieren?',
   migrate_data: 'Daten migrieren',

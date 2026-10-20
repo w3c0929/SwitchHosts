@@ -876,6 +876,91 @@ pub async fn pick_file_path<R: Runtime>(app: AppHandle<R>, _args: Args) -> Value
     }
 }
 
+// ---- local Markdown files --------------------------------------------------
+
+/// Local Markdown file size cap for read/write. Large documents are rare and
+/// keeping a bound avoids loading a huge file into the editor by accident.
+const MAX_MD_FILE_BYTES: u64 = 16 * 1024 * 1024;
+
+/// Only `.md` / `.markdown` paths are accepted for read/write. The renderer
+/// stores these paths (md_path), so this also bounds what a compromised
+/// renderer could write to.
+fn validate_md_path(raw: &str) -> Result<PathBuf, String> {
+    let path = PathBuf::from(raw);
+    let ext_ok = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| matches!(e.to_ascii_lowercase().as_str(), "md" | "markdown"))
+        .unwrap_or(false);
+    if !ext_ok {
+        return Err("only .md / .markdown files are supported".to_string());
+    }
+    Ok(path)
+}
+
+/// Open a native "open file" dialog filtered to Markdown files.
+#[tauri::command]
+pub async fn pick_md_file<R: Runtime>(app: AppHandle<R>, _args: Args) -> Value {
+    let picked = app
+        .dialog()
+        .file()
+        .add_filter("Markdown", &["md", "markdown"])
+        .add_filter("All files", &["*"])
+        .blocking_pick_file();
+    match picked {
+        Some(p) => match p.into_path() {
+            Ok(path) => Value::String(path.display().to_string()),
+            Err(_) => Value::Null,
+        },
+        None => Value::Null,
+    }
+}
+
+/// Read a local Markdown file as UTF-8 text.
+#[tauri::command]
+pub async fn read_md_file(args: Args) -> Result<Value, String> {
+    let raw = args
+        .first()
+        .and_then(Value::as_str)
+        .ok_or_else(|| "read_md_file: args[0] must be a string".to_string())?;
+    let path = validate_md_path(raw)?;
+    let meta =
+        std::fs::metadata(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+    if meta.len() > MAX_MD_FILE_BYTES {
+        return Err(format!(
+            "file too large (max {} MB)",
+            MAX_MD_FILE_BYTES / 1024 / 1024
+        ));
+    }
+    let bytes = std::fs::read(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let text = String::from_utf8(bytes)
+        .map_err(|_| format!("{}: file is not valid UTF-8", path.display()))?;
+    Ok(Value::String(text))
+}
+
+/// Write UTF-8 text back to a local Markdown file (atomic replacement).
+#[tauri::command]
+pub async fn write_md_file(args: Args) -> Result<Value, String> {
+    let raw = args
+        .first()
+        .and_then(Value::as_str)
+        .ok_or_else(|| "write_md_file: args[0] must be a string".to_string())?;
+    let content = args
+        .get(1)
+        .and_then(Value::as_str)
+        .ok_or_else(|| "write_md_file: args[1] must be a string".to_string())?;
+    let path = validate_md_path(raw)?;
+    if content.len() as u64 > MAX_MD_FILE_BYTES {
+        return Err(format!(
+            "content too large (max {} MB)",
+            MAX_MD_FILE_BYTES / 1024 / 1024
+        ));
+    }
+    crate::storage::atomic::atomic_write(&path, content.as_bytes())
+        .map_err(|e| e.to_string())?;
+    Ok(Value::Null)
+}
+
 #[tauri::command]
 pub async fn refresh_remote_hosts<R: Runtime>(
     app: AppHandle<R>,
@@ -1939,4 +2024,44 @@ pub async fn reset_data_dir<R: Runtime>(
     app.restart();
     #[allow(unreachable_code)]
     Ok(Value::Null)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn validates_markdown_file_extensions() {
+        assert!(validate_md_path("C:\\docs\\notes.md").is_ok());
+        assert!(validate_md_path("/home/u/README.MD").is_ok());
+        assert!(validate_md_path("notes.markdown").is_ok());
+        assert!(validate_md_path("hosts").is_err());
+        assert!(validate_md_path("notes.txt").is_err());
+        assert!(validate_md_path("").is_err());
+    }
+
+    #[test]
+    fn md_file_read_write_roundtrip() {
+        let dir = std::env::temp_dir().join(format!(
+            "swh-md-file-test-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("notes.md");
+        let path_str = path.to_string_lossy().to_string();
+
+        tokio::runtime::Runtime::new().unwrap().block_on(async {
+            write_md_file(vec![json!(path_str), json!("# Hello\n\n世界\n")])
+                .await
+                .expect("write ok");
+            let read = read_md_file(vec![json!(path_str)]).await.expect("read ok");
+            assert_eq!(read.as_str().unwrap(), "# Hello\n\n世界\n");
+        });
+
+        std::fs::remove_dir_all(dir).ok();
+    }
 }

@@ -20,6 +20,8 @@ export interface IHostsListObject {
   as_hosts?: boolean
   // 是否在右侧主编辑器区域显示内容：缺省/true = 显示；false = 隐藏
   show_content?: boolean
+  // 关联的本地 Markdown 文件绝对路径：内容直接读写该文件（永不进系统 hosts）
+  md_path?: string
   // 下载型方案的通知：当前渠道（wecom 企业微信 / dingtalk 钉钉 / other 其他）
 // webhook 地址列表已迁移到全局配置（ConfigsType.notify_webhooks），所有方案共用一份
 // 此处仅保留面板状态（渠道选择）和 per-scheme 的消息模板/格式

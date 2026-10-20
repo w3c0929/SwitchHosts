@@ -141,6 +141,11 @@ export default {
   local: '로컬',
   match: '일치',
   md_entry_desc: '제목이 .md로 끝나는 항목은 Markdown 문서로 처리됩니다(기본 미리보기, 소스 전환 가능). 내용은 시스템 hosts에 기록되지 않습니다.',
+  md_file_read_failed: '로컬 Markdown 파일을 읽을 수 없습니다',
+  md_file_write_failed: '로컬 Markdown 파일 저장 실패',
+  md_local_file: '로컬 파일',
+  md_open_file: '로컬 Markdown 문서 열기',
+  md_open_file_desc: '로컬 .md 파일 선택: 왼쪽 목록에 별도 항목으로 추가되며 편집 내용은 원본 파일에 저장됩니다.',
   migrate_confirm:
     'SwitchHosts v4.0는 새로운 데이터 저장 형식을 사용합니다. 이전 데이터를 새 형식으로 마이그레이션(이전)하시겠습니까?',
   migrate_data: '데이터 이전',

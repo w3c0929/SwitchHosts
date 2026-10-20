@@ -30,4 +30,10 @@ describe('isMarkdownEntry', () => {
     expect(isMarkdownEntry(null)).toBe(false)
     expect(isMarkdownEntry(undefined)).toBe(false)
   })
+
+  it('treats an entry with a linked local md file as markdown', () => {
+    expect(isMarkdownEntry({ title: 'Notes', md_path: 'C:\\docs\\notes.md' })).toBe(true)
+    expect(isMarkdownEntry({ title: 'Notes', md_path: '   ' })).toBe(false)
+    expect(isMarkdownEntry({ title: 'Notes', md_path: '' })).toBe(false)
+  })
 })

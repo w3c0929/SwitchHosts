@@ -11,5 +11,16 @@
 export const isMarkdownTitle = (title?: string | null): boolean =>
   !!title && title.trim().toLowerCase().endsWith('.md')
 
-export const isMarkdownEntry = (entry?: { title?: string } | null): boolean =>
-  isMarkdownTitle(entry?.title)
+const readStringProp = (obj: unknown, key: string): string | undefined => {
+  if (!obj || typeof obj !== 'object') return undefined
+  const value = (obj as Record<string, unknown>)[key]
+  return typeof value === 'string' ? value : undefined
+}
+
+/** 关联了本地 md 文件的条目（内容直接读写该文件）。 */
+export const hasMarkdownFile = (entry?: unknown): boolean =>
+  !!readStringProp(entry, 'md_path')?.trim()
+
+/** Markdown 条目：标题以 .md 结尾，或关联了本地 md 文件。 */
+export const isMarkdownEntry = (entry?: unknown): boolean =>
+  isMarkdownTitle(readStringProp(entry, 'title')) || hasMarkdownFile(entry)

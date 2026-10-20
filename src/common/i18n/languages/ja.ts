@@ -145,6 +145,11 @@ const lang: LanguageDict = {
   local: 'ローカル',
   match: '一致',
   md_entry_desc: 'タイトルが .md で終わる場合：Markdown 文書として扱われ（既定ではプレビュー表示、ソースに切替可能）、内容がシステム hosts に書き込まれることはありません。',
+  md_file_read_failed: 'ローカルの Markdown ファイルを読み込めません',
+  md_file_write_failed: 'ローカルの Markdown ファイルを保存できません',
+  md_local_file: 'ローカルファイル',
+  md_open_file: 'ローカル Markdown ドキュメントを開く',
+  md_open_file_desc: 'ローカルの .md ファイルを選択：左側リストに独立した項目として追加され、編集内容は元のファイルに保存されます。',
   migrate_confirm:
     'SwitchHosts v4.0は新しいデータ保存形式を使用します。古いデータを新しい形式に移行しますか？',
   migrate_data: 'データ移行',

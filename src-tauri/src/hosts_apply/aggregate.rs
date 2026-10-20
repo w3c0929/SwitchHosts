@@ -79,13 +79,21 @@ fn is_on(node: &Value) -> bool {
     if node.get("as_hosts").and_then(Value::as_bool) == Some(false) {
         return false;
     }
-    // Markdown 文档条目（标题 .md 结尾）永不进入系统 hosts：它的内容是
-    // 文档而非 hosts 规则。即使 as_hosts 缺省/为 true（旧配置或手动编辑
-    // manifest）也在此拦截。
+    // Markdown 文档条目（标题 .md 结尾，或关联了本地 md 文件）永不进入
+    // 系统 hosts：它的内容是文档而非 hosts 规则。即使 as_hosts 缺省/为
+    // true（旧配置或手动编辑 manifest）也在此拦截。
     if let Some(title) = node.get("title").and_then(Value::as_str) {
         if is_markdown_title(title) {
             return false;
         }
+    }
+    if node
+        .get("md_path")
+        .and_then(Value::as_str)
+        .map(|p| !p.trim().is_empty())
+        .unwrap_or(false)
+    {
+        return false;
     }
     // 脚本触发方案（file:// 指向本机 .ps1）同样永不进入系统 hosts：
     // 它的运行输出不是 hosts 内容。即使 as_hosts 缺省/为 true（旧配置或
@@ -269,6 +277,27 @@ mod tests {
 
         assert!(content.contains("127.0.0.1 a.com"));
         assert!(!content.contains("# Readme"));
+        std::fs::remove_dir_all(&paths.root).ok();
+    }
+
+    #[test]
+    fn md_path_nodes_are_excluded_from_aggregation() {
+        let paths = temp_paths("md-path");
+        entries::write_entry(&paths.entries_dir, "md-file-node", "# Notes\n").unwrap();
+
+        // md_path 条目即使标题不是 .md、as_hosts 缺省，也绝不进入系统 hosts。
+        let list = json!([
+            {
+                "id": "md-file-node", "title": "Notes", "type": "local", "on": true,
+                "md_path": "C:\\docs\\notes.md",
+            },
+        ])
+        .as_array()
+        .cloned()
+        .unwrap();
+
+        let content = aggregate_selected_content(&list, &paths, false).unwrap();
+        assert!(!content.contains("# Notes"));
         std::fs::remove_dir_all(&paths.root).ok();
     }
 

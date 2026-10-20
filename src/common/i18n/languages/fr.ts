@@ -148,6 +148,11 @@ const lang: LanguageDict = {
   local: 'Local',
   match: 'Correspondance',
   md_entry_desc: "Un titre se terminant par .md est traité comme un document Markdown (aperçu par défaut, bascule vers la source possible). Son contenu n'est jamais écrit dans le fichier hosts système.",
+  md_file_read_failed: 'Impossible de lire le fichier Markdown local',
+  md_file_write_failed: 'Impossible d’enregistrer le fichier Markdown local',
+  md_local_file: 'Fichier local',
+  md_open_file: 'Ouvrir un document Markdown local',
+  md_open_file_desc: 'Choisir un fichier .md local : il est ajouté à la liste de gauche comme entrée distincte et les modifications sont enregistrées dans le fichier d’origine.',
   migrate_confirm:
     'SwitchHosts v4.0 utilise un nouveau format de stockage des données, voulez-vous migrer les anciennes données dans ce nouveau format ?',
   migrate_data: 'Migrer les données',

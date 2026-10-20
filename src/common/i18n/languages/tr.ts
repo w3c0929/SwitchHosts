@@ -145,6 +145,11 @@ export default {
   local: 'Yerel',
   match: 'Eşleşme',
   md_entry_desc: 'Başlığı .md ile biten öğeler Markdown belgesi olarak işlenir (varsayılan önizleme, kaynağa geçilebilir). İçeriği sistem hosts dosyasına asla yazılmaz.',
+  md_file_read_failed: 'Yerel Markdown dosyası okunamadı',
+  md_file_write_failed: 'Yerel Markdown dosyası kaydedilemedi',
+  md_local_file: 'Yerel dosya',
+  md_open_file: 'Yerel Markdown belgesini aç',
+  md_open_file_desc: 'Yerel bir .md dosyası seçin: sol listeye ayrı bir öğe olarak eklenir ve düzenlemeler özgün dosyaya kaydedilir.',
   migrate_confirm:
     'SwitchHosts v4.0 yeni bir veri depolama formatı kullanıyor, eski verileri yeni formata taşımak ister misiniz?',
   migrate_data: 'Veri taşı',

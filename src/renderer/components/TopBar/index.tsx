@@ -182,20 +182,22 @@ const TopBar = (props: IProps) => {
           </Flex>
         ) : null}
         {isMd ? (
-          <SegmentedControl
-            size="xs"
-            aria-label="Markdown view mode"
-            value={mdViewMode}
-            onChange={(v) => {
-              updateConfigs({ md_view_mode: v as 'preview' | 'source' }).catch((e) =>
-                console.error(e),
-              )
-            }}
-            data={[
-              { value: 'preview', label: lang.preview },
-              { value: 'source', label: lang.source_code },
-            ]}
-          />
+          <Box data-testid="md-view-toggle">
+            <SegmentedControl
+              size="xs"
+              aria-label="Markdown view mode"
+              value={mdViewMode}
+              onChange={(v) => {
+                updateConfigs({ md_view_mode: v as 'preview' | 'source' }).catch((e) =>
+                  console.error(e),
+                )
+              }}
+              data={[
+                { value: 'preview', label: lang.preview },
+                { value: 'source', label: lang.edit },
+              ]}
+            />
+          </Box>
         ) : null}
         <ActionIcon
           aria-label="Toggle right panel"

@@ -368,3 +368,27 @@ fn copy_if_present(src: &Map<String, Value>, dst: &mut Map<String, Value>, key: 
         dst.insert(key.into(), v.clone());
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn md_path_round_trips_through_v5_extras() {
+        // md_path 是未建模字段，依赖 extras 透传；确保保存/读取往返不丢失。
+        let legacy = vec![serde_json::json!({
+            "id": "md-1",
+            "type": "local",
+            "title": "notes.md",
+            "on": true,
+            "as_hosts": false,
+            "md_path": "C:\\docs\\notes.md",
+        })];
+        let (v5, collapsed) = legacy_root_to_v5(&legacy);
+        let back = v5_root_to_legacy(&v5, &collapsed);
+        assert_eq!(
+            back[0].get("md_path").and_then(Value::as_str),
+            Some("C:\\docs\\notes.md")
+        );
+    }
+}

@@ -6,7 +6,7 @@
 import { FolderModeType, HostsType, IHostsListObject } from '@common/data'
 import events from '@common/events'
 import * as hostsFn from '@common/hostsFn'
-import { isMarkdownTitle } from '@common/markdown'
+import { hasMarkdownFile, isMarkdownEntry } from '@common/markdown'
 import {
   ActionIcon,
   Badge,
@@ -115,7 +115,7 @@ const EditHostsInfo = () => {
       data.as_hosts = false
     }
     // Markdown 文档条目（标题 .md 结尾）永不进入系统 hosts。
-    if (isMarkdownTitle(data.title)) {
+    if (isMarkdownEntry(data)) {
       data.as_hosts = false
     }
 
@@ -163,7 +163,7 @@ const EditHostsInfo = () => {
       obj.as_hosts = false
     }
     // Markdown 文档条目：内容不进入系统 hosts 管线，强制 as_hosts=false。
-    if (isMarkdownTitle(obj.title)) {
+    if (isMarkdownEntry(obj)) {
       obj.as_hosts = false
     }
     setHosts(obj)
@@ -222,8 +222,41 @@ const EditHostsInfo = () => {
     }
   }
 
+  /**
+   * 「打开本地 Markdown 文档」：选择本机 .md 文件后立即以独立条目加入
+   * 左侧列表并选中打开（不经过本表单的「确定」，当前未提交的 hosts
+   * 编辑内容会被丢弃）。同一文件已有条目时直接选中，避免重复创建。
+   */
+  const onPickMdFile = async () => {
+    try {
+      const picked = await actions.pickMdFile()
+      if (typeof picked !== 'string' || !picked) return
+
+      const existing = hostsFn.flatten(hostsData.list).find((i) => i.md_path === picked)
+      if (existing) {
+        agent.broadcast(events.select_hosts, existing.id, 1000)
+        setIsShow(false)
+        return
+      }
+
+      const name = picked.split(/[\\/]/).pop() || 'document.md'
+      const h: IHostsListObject = {
+        id: uuidv4(),
+        type: 'local',
+        title: name,
+        as_hosts: false,
+        md_path: picked,
+      }
+      await setList([...hostsData.list, h])
+      agent.broadcast(events.select_hosts, h.id, 1000)
+      setIsShow(false)
+    } catch (e) {
+      console.error(e)
+    }
+  }
+
   const forRemote = (): React.ReactElement => {
-    const isMd = isMarkdownTitle(hosts?.title)
+    const isMd = isMarkdownEntry(hosts)
     const interval = hosts?.refresh_interval || 0
     const isPreset = REFRESH_PRESETS.includes(interval)
     const selectValue = isPreset ? interval.toString() : interval > 0 ? 'custom' : '0'
@@ -691,7 +724,7 @@ const EditHostsInfo = () => {
             }
             onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => e.key === 'Enter' && onSave()}
           />
-          {isMarkdownTitle(hosts?.title) ? (
+          {isMarkdownEntry(hosts) ? (
             <Group gap="6px" mt="8px" align="center">
               <Badge color="blue" variant="light" size="sm">
                 Markdown
@@ -701,7 +734,22 @@ const EditHostsInfo = () => {
               </Text>
             </Group>
           ) : null}
+          {!isAdd && hasMarkdownFile(hosts) ? (
+            <Text size="xs" c="dimmed" mt="8px" style={{ wordBreak: 'break-all' }}>
+              {lang.md_local_file}: {hosts?.md_path}
+            </Text>
+          ) : null}
         </Box>
+
+        {isAdd && (hosts?.type || 'local') === 'local' ? (
+          <Box className={styles.ln}>
+            <Text mb="8px">{lang.md_open_file}</Text>
+            <Button variant="default" leftSection={<BiFolderOpen />} onClick={onPickMdFile}>
+              {lang.browse}
+            </Button>
+            <DescriptionText mt="8px">{lang.md_open_file_desc}</DescriptionText>
+          </Box>
+        ) : null}
 
         {hosts?.type === 'remote' ? forRemote() : null}
         {hosts?.type === 'group' ? forGroup() : null}

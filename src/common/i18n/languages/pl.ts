@@ -146,6 +146,11 @@ export default {
   local: 'Lokalny',
   match: 'Dopasuj',
   md_entry_desc: 'Tytuł kończący się na .md jest traktowany jako dokument Markdown (domyślnie podgląd, możliwość przełączenia na źródło). Zawartość nigdy nie trafia do systemowego pliku hosts.',
+  md_file_read_failed: 'Nie można odczytać lokalnego pliku Markdown',
+  md_file_write_failed: 'Nie udało się zapisać lokalnego pliku Markdown',
+  md_local_file: 'Plik lokalny',
+  md_open_file: 'Otwórz lokalny dokument Markdown',
+  md_open_file_desc: 'Wybierz lokalny plik .md: zostanie dodany do lewej listy jako osobny element, a zmiany są zapisywane w oryginalnym pliku.',
   migrate_confirm:
     'SwitchHosts v4.0 używa nowego formatu przechowywania danych, czy chcesz migrować stare dane do nowego formatu?',
   migrate_data: 'Migruj dane',

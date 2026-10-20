@@ -66,6 +66,8 @@
 
   const state = {
     configs,
+    // Local markdown files keyed by absolute path (read_md_file / write_md_file).
+    mdFiles: {},
     list: [
       {
         id: 'local-dev',
@@ -407,6 +409,13 @@
         case 'set_hosts_content':
           state.contents[params[0]] = params[1] || ''
           return true
+        case 'pick_md_file':
+          return state.nextMdPick || 'C:\\e2e\\notes.md'
+        case 'read_md_file':
+          return state.mdFiles[params[0]] || ''
+        case 'write_md_file':
+          state.mdFiles[params[0]] = params[1] || ''
+          return null
         case 'get_content_of_list':
           return aggregateContent(params[0] || state.list)
         case 'apply_hosts_selection':
