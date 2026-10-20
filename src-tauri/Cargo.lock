@@ -4605,7 +4605,7 @@ dependencies = [
 
 [[package]]
 name = "switchhosts"
-version = "5.0.1"
+version = "5.1.0"
 dependencies = [
  "axum",
  "base64 0.22.1",
