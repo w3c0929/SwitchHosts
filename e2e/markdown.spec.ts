@@ -98,4 +98,42 @@ test.describe('markdown entries', () => {
     await page.keyboard.type(' ok')
     await expect(editor).toContainText('ok')
   })
+
+  test('allows selecting text in the markdown preview', async ({ page }) => {
+    // 全局样式默认 user-select:none；预览区必须显式恢复，否则无法拖选复制。
+    await page.getByLabel('Add').click()
+    const drawer = page.getByRole('dialog')
+    await drawer.getByLabel('Hosts Title', { exact: true }).fill('select.md')
+    await drawer.getByRole('button', { name: 'OK' }).click()
+
+    const row = page.locator('[data-id]').filter({ hasText: 'select.md' })
+    await row.click()
+
+    await page.getByTestId('md-view-toggle').getByText('Edit', { exact: true }).click()
+    const editor = page.locator('.cm-content')
+    await editor.click()
+    await page.keyboard.type('# Select me')
+    await page.keyboard.press('Enter')
+    await page.keyboard.press('Enter')
+    await page.keyboard.type('selectable paragraph text')
+    await page.waitForTimeout(1400)
+
+    await page.getByTestId('md-view-toggle').getByText('Preview', { exact: true }).click()
+    const preview = page.getByTestId('markdown-preview')
+    const paragraph = preview.locator('p').filter({ hasText: 'selectable paragraph text' })
+    await expect(paragraph).toBeVisible()
+
+    const userSelect = await preview.evaluate((el) => getComputedStyle(el).userSelect)
+    expect(userSelect).toBe('text')
+
+    // Drag-select the paragraph with the mouse.
+    const box = (await paragraph.boundingBox())!
+    await page.mouse.move(box.x + 2, box.y + box.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(box.x + box.width - 2, box.y + box.height / 2, { steps: 10 })
+    await page.mouse.up()
+
+    const selected = await page.evaluate(() => window.getSelection()?.toString() || '')
+    expect(selected).toContain('selectable paragraph')
+  })
 })

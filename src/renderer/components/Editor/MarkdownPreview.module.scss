@@ -10,6 +10,11 @@
   font-size: 14px;
   line-height: 1.7;
   box-sizing: border-box;
+  // 全局默认禁用了文本选择（html/body: user-select none），预览区需显式
+  // 恢复，否则无法拖选/复制。
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
 }
 
 .body {
@@ -85,6 +90,7 @@
   a {
     color: var(--swh-editor-ip);
     text-decoration: none;
+    cursor: pointer;
 
     &:hover {
       text-decoration: underline;
