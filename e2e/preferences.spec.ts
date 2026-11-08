@@ -340,6 +340,49 @@ test.describe('preferences', () => {
     )
   })
 
+  test('split view preferences default correctly and save immediately', async ({ page }) => {
+    await clearMockCalls(page)
+
+    await page.getByLabel('Settings').click()
+    await page.getByText('Preferences').click()
+    const preferences = page.getByRole('dialog')
+    await expect(preferences.getByText('General')).toBeVisible()
+
+    const listScroll = preferences.getByLabel('Auto-scroll on list click')
+    const editLeft = preferences.getByLabel('Editor on the left in split view')
+    const syncScroll = preferences.getByLabel('Sync scrolling in split view')
+    await expect(editLeft).toBeVisible()
+    await expect(syncScroll).toBeVisible()
+
+    // Both new options sit below the list auto-scroll toggle.
+    const listBox = (await listScroll.boundingBox())!
+    const editBox = (await editLeft.boundingBox())!
+    const syncBox = (await syncScroll.boundingBox())!
+    expect(editBox.y).toBeGreaterThan(listBox.y)
+    expect(syncBox.y).toBeGreaterThan(editBox.y)
+
+    // Defaults: editor on the right (off), sync scrolling on.
+    await expect(editLeft).not.toBeChecked()
+    await expect(syncScroll).toBeChecked()
+
+    await editLeft.check()
+
+    await expect
+      .poll(async () => {
+        const state = await getMockState(page)
+        return {
+          editLeft: state.configs.md_split_edit_left,
+          sync: state.configs.md_split_sync_scroll,
+        }
+      })
+      .toEqual({ editLeft: true, sync: true })
+
+    const calls = await getMockCalls(page)
+    expect(configPatches(calls)).toEqual(
+      expect.arrayContaining([expect.objectContaining({ md_split_edit_left: true })]),
+    )
+  })
+
   test('automatic update checks default on and save immediately', async ({ page }) => {
     await clearMockCalls(page)
 

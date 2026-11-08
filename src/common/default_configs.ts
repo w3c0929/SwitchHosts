@@ -41,8 +41,12 @@ const configs = {
   quit_on_close: false,
   // 点击左侧方案列表项时是否自动滚动到该项（默认关闭 = 不滚动）
   list_scroll_on_click: false,
-  // Markdown 条目的查看模式（预览 / 源码），记住上次选择
-  md_view_mode: 'preview' as 'preview' | 'source',
+  // 预编分屏：编辑区是否在左侧（默认关闭 = 左预览 / 右编辑）
+  md_split_edit_left: false,
+  // 预编分屏：编辑区与预览区是否同步滚动（默认开启）
+  md_split_sync_scroll: true,
+  // Markdown 条目的查看模式（预览 / 预编分屏 / 编辑），记住上次选择
+  md_view_mode: 'preview' as 'preview' | 'preview-edit' | 'source',
 
   // find window — sticky search options across reopens and restarts
   find_is_regexp: false,

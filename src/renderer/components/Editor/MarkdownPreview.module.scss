@@ -133,6 +133,60 @@
     }
   }
 
+  // 代码块容器：头部栏（语言 + 复制）+ 代码区
+  .code_block {
+    margin: 0.7em 0;
+    border: 1px solid var(--swh-border-color-0);
+    border-radius: 6px;
+    overflow: hidden;
+    background: rgba(127, 127, 127, 0.1);
+  }
+
+  .code_header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 4px 10px;
+    background: rgba(127, 127, 127, 0.1);
+    border-bottom: 1px solid var(--swh-border-color-0);
+    user-select: none;
+  }
+
+  .code_lang {
+    font-family: var(--swh-editor-font-family, Menlo, Consolas, 'Courier New', monospace);
+    font-size: 0.76em;
+    color: var(--swh-font-color-weak);
+  }
+
+  .copy_btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--swh-font-color-weak);
+    font-size: 0.76em;
+    line-height: 1.6;
+    cursor: pointer;
+    user-select: none;
+
+    &:hover {
+      background: rgba(127, 127, 127, 0.18);
+      color: var(--swh-editor-text-color);
+    }
+  }
+
+  // 覆盖头部容器下的 pre：去掉自身边框/圆角/外边距
+  .code_block pre {
+    margin: 0;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+  }
+
   table {
     border-collapse: collapse;
     display: block;

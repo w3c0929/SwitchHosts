@@ -136,4 +136,111 @@ test.describe('markdown entries', () => {
     const selected = await page.evaluate(() => window.getSelection()?.toString() || '')
     expect(selected).toContain('selectable paragraph')
   })
+
+  test('split mode edits with a live preview', async ({ page }) => {
+    await page.getByLabel('Add').click()
+    const drawer = page.getByRole('dialog')
+    await drawer.getByLabel('Hosts Title', { exact: true }).fill('split.md')
+    await drawer.getByRole('button', { name: 'OK' }).click()
+
+    await page.locator('[data-id]').filter({ hasText: 'split.md' }).click()
+    await page.getByTestId('md-view-toggle').getByText('Split', { exact: true }).click()
+
+    const editor = page.locator('.cm-content')
+    const preview = page.getByTestId('markdown-preview')
+    await expect(editor).toBeVisible()
+    await expect(preview).toBeVisible()
+    await expect(page.getByTestId('md-split-divider')).toBeVisible()
+
+    // Typing updates the preview immediately (no mode switch needed).
+    await editor.click()
+    await page.keyboard.type('# Live title')
+    await expect(preview.locator('h1')).toContainText('Live title')
+  })
+
+  test('split layout follows the preference and scrolls in sync', async ({ page }) => {
+    await page.getByLabel('Add').click()
+    const drawer = page.getByRole('dialog')
+    await drawer.getByLabel('Hosts Title', { exact: true }).fill('long.md')
+    await drawer.getByRole('button', { name: 'OK' }).click()
+
+    const row = page.locator('[data-id]').filter({ hasText: 'long.md' })
+    await row.click()
+
+    // Give the document enough content to scroll on both sides.
+    const mdId = await page.evaluate(() => {
+      const st = window.__SWITCHHOSTS_E2E__.state
+      const entry = st.list.find((item) => item.title === 'long.md')!
+      st.contents[entry.id] = Array.from(
+        { length: 120 },
+        (_, i) => `## Section ${i}\n\nparagraph ${i} with some text to render.`,
+      ).join('\n\n')
+      return entry.id
+    })
+    // Reselect to reload the document from the store.
+    await page.locator('[data-id="local-api"]').click()
+    await page.locator(`[data-id="${mdId}"]`).click()
+
+    await page.getByTestId('md-view-toggle').getByText('Split', { exact: true }).click()
+    const editor = page.getByTestId('md-split-editor')
+    const preview = page.getByTestId('md-split-preview')
+    await expect(editor).toBeVisible()
+    await expect(preview).toBeVisible()
+
+    // Default layout: preview left, editor right.
+    const editorBox = (await editor.boundingBox())!
+    const previewBox = (await preview.boundingBox())!
+    expect(previewBox.x).toBeLessThan(editorBox.x)
+
+    // Enable "editor on the left" → order flips immediately.
+    await page.getByLabel('Settings').click()
+    await page.getByText('Preferences').click()
+    const preferences = page.getByRole('dialog')
+    await preferences.getByLabel('Editor on the left in split view').check()
+    await page.keyboard.press('Escape')
+    await expect(preferences).not.toBeVisible()
+
+    const editorBox2 = (await editor.boundingBox())!
+    const previewBox2 = (await preview.boundingBox())!
+    expect(editorBox2.x).toBeLessThan(previewBox2.x)
+
+    // Sync scrolling: scrolling the editor scrolls the preview.
+    const previewScroller = preview.getByTestId('markdown-preview')
+    await editor.locator('.cm-scroller').evaluate((el) => {
+      el.scrollTop = Math.floor((el.scrollHeight - el.clientHeight) / 2)
+    })
+    await expect
+      .poll(async () => previewScroller.evaluate((el) => el.scrollTop), { timeout: 4000 })
+      .toBeGreaterThan(0)
+  })
+
+  test('copies code block content from the preview', async ({ page }) => {
+    await page.context().grantPermissions(['clipboard-read', 'clipboard-write'])
+
+    await page.getByLabel('Add').click()
+    const drawer = page.getByRole('dialog')
+    await drawer.getByLabel('Hosts Title', { exact: true }).fill('code.md')
+    await drawer.getByRole('button', { name: 'OK' }).click()
+
+    await page.locator('[data-id]').filter({ hasText: 'code.md' }).click()
+    await page.getByTestId('md-view-toggle').getByText('Edit', { exact: true }).click()
+    const editor = page.locator('.cm-content')
+    await editor.click()
+    await page.keyboard.type('```yaml')
+    await page.keyboard.press('Enter')
+    await page.keyboard.type('name: demo')
+    await page.keyboard.press('Enter')
+    await page.keyboard.type('```')
+
+    await page.getByTestId('md-view-toggle').getByText('Preview', { exact: true }).click()
+    const block = page.getByTestId('code-block')
+    await expect(block).toBeVisible()
+    await expect(block.locator('span').first()).toContainText('yaml')
+
+    await block.getByTestId('code-copy-button').click()
+    await expect(block.getByTestId('code-copy-button')).toContainText('Copied')
+
+    const text = await page.evaluate(() => navigator.clipboard.readText())
+    expect(text).toContain('name: demo')
+  })
 })

@@ -49,7 +49,12 @@ pub struct AppConfig {
     pub quit_on_close: bool,
     /// 点击左侧方案列表项时是否自动滚动到该项。默认 false（不滚动）。
     pub list_scroll_on_click: bool,
-    /// Markdown 条目的查看模式："preview"（默认）| "source"，记住上次选择。
+    /// 预编分屏：编辑区是否在左侧。默认 false（左预览 / 右编辑）。
+    pub md_split_edit_left: bool,
+    /// 预编分屏：编辑区与预览区是否同步滚动。默认 true。
+    pub md_split_sync_scroll: bool,
+    /// Markdown 条目的查看模式："preview"（默认）| "preview-edit" | "source"，
+    /// 记住上次选择。
     pub md_view_mode: String,
 
     // find window
@@ -106,6 +111,8 @@ impl Default for AppConfig {
             lightweight_mode: false,
             quit_on_close: false,
             list_scroll_on_click: false,
+            md_split_edit_left: false,
+            md_split_sync_scroll: true,
             md_view_mode: "preview".to_string(),
 
             find_is_regexp: false,
@@ -138,7 +145,10 @@ impl AppConfig {
         if !matches!(self.proxy_protocol.as_str(), "http" | "https" | "socks5") {
             self.proxy_protocol = "http".to_string();
         }
-        if !matches!(self.md_view_mode.as_str(), "preview" | "source") {
+        if !matches!(
+            self.md_view_mode.as_str(),
+            "preview" | "preview-edit" | "source"
+        ) {
             self.md_view_mode = "preview".to_string();
         }
         if self.proxy_port > MAX_PROXY_PORT {
@@ -339,6 +349,28 @@ mod tests {
     }
 
     #[test]
+    fn defaults_split_prefs_to_preview_left_and_sync_on() {
+        let cfg = AppConfig::default();
+
+        assert!(!cfg.md_split_edit_left);
+        assert!(cfg.md_split_sync_scroll);
+    }
+
+    #[test]
+    fn apply_partial_accepts_split_prefs() {
+        let mut cfg = AppConfig::default();
+
+        cfg.apply_partial(&json!({
+            "md_split_edit_left": true,
+            "md_split_sync_scroll": false,
+        }))
+        .unwrap();
+
+        assert!(cfg.md_split_edit_left);
+        assert!(!cfg.md_split_sync_scroll);
+    }
+
+    #[test]
     fn defaults_md_view_mode_to_preview() {
         let cfg = AppConfig::default();
 
@@ -353,6 +385,16 @@ mod tests {
             .unwrap();
 
         assert_eq!(cfg.md_view_mode, "source");
+    }
+
+    #[test]
+    fn apply_partial_accepts_preview_edit_mode() {
+        let mut cfg = AppConfig::default();
+
+        cfg.apply_partial(&json!({ "md_view_mode": "preview-edit" }))
+            .unwrap();
+
+        assert_eq!(cfg.md_view_mode, "preview-edit");
     }
 
     #[test]

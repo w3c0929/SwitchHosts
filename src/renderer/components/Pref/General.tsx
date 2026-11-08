@@ -203,6 +203,30 @@ const General = (props: IProps) => {
         </Group>
       </Box>
 
+      <Box w="100%">
+        <Group>
+          <Checkbox
+            checked={data.md_split_edit_left}
+            onChange={(e) => onChange({ md_split_edit_left: e.target.checked })}
+            label={lang.md_split_edit_left}
+            description={lang.md_split_edit_left_desc}
+            styles={checkboxDescriptionStyles}
+          />
+        </Group>
+      </Box>
+
+      <Box w="100%">
+        <Group>
+          <Checkbox
+            checked={data.md_split_sync_scroll}
+            onChange={(e) => onChange({ md_split_sync_scroll: e.target.checked })}
+            label={lang.md_split_sync_scroll}
+            description={lang.md_split_sync_scroll_desc}
+            styles={checkboxDescriptionStyles}
+          />
+        </Group>
+      </Box>
+
       {platform === 'darwin' ? (
         <Box w="100%">
           <Group>

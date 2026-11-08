@@ -88,6 +88,54 @@
   display: none;
 }
 
+// ---- Markdown 预编分屏（左编辑 / 右预览，可拖动分隔条） ----
+.md_split {
+  display: flex;
+  background: var(--swh-editor-bg-color);
+
+  .mount {
+    height: auto;
+    min-width: 0;
+    min-height: 0;
+    flex-grow: 0;
+    flex-shrink: 0;
+  }
+
+  &.vertical {
+    flex-direction: column;
+
+    .mount {
+      width: 100%;
+    }
+  }
+}
+
+.split_divider {
+  flex: 0 0 5px;
+  cursor: col-resize;
+  transition: background 0.15s;
+  // 分隔线的视觉位置固定在分隔条中轴，与左右两侧的排列顺序无关。
+  background: linear-gradient(var(--swh-border-color-0), var(--swh-border-color-0)) center /
+    1px 100% no-repeat;
+
+  .vertical & {
+    cursor: row-resize;
+    background: linear-gradient(var(--swh-border-color-0), var(--swh-border-color-0)) center /
+      100% 1px no-repeat;
+  }
+
+  &:hover {
+    background: var(--swh-primary-color);
+  }
+}
+
+.split_preview {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
 // Markdown 预览模式下渲染区自身负责背景与滚动。
 .md_preview {
   background: var(--swh-editor-bg-color);

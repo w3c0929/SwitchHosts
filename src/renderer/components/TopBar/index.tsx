@@ -41,9 +41,14 @@ const TopBar = (props: IProps) => {
   const { isHostsInTrashcan, currentHosts, isReadOnly } = useHostsData()
   const { configs, updateConfigs } = useConfigs()
   const [isOn, setIsOn] = useState(!!currentHosts?.on)
-  // Markdown 条目才显示「预览 | 源码」切换；模式全局记住（配置项）。
+  // Markdown 条目才显示「预览 | 预编 | 编辑」切换；模式全局记住（配置项）。
   const isMd = isMarkdownEntry(currentHosts)
-  const mdViewMode = configs?.md_view_mode === 'source' ? 'source' : 'preview'
+  const mdViewMode =
+    configs?.md_view_mode === 'source'
+      ? 'source'
+      : configs?.md_view_mode === 'preview-edit'
+        ? 'preview-edit'
+        : 'preview'
   const iconSize = 20
   const iconStroke = 1.5
 
@@ -188,12 +193,13 @@ const TopBar = (props: IProps) => {
               aria-label="Markdown view mode"
               value={mdViewMode}
               onChange={(v) => {
-                updateConfigs({ md_view_mode: v as 'preview' | 'source' }).catch((e) =>
-                  console.error(e),
-                )
+                updateConfigs({
+                  md_view_mode: v as 'preview' | 'preview-edit' | 'source',
+                }).catch((e) => console.error(e))
               }}
               data={[
                 { value: 'preview', label: lang.preview },
+                { value: 'preview-edit', label: lang.preview_edit },
                 { value: 'source', label: lang.edit },
               ]}
             />

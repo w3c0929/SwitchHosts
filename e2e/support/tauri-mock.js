@@ -57,6 +57,8 @@
     multi_chose_folder_switch_all: false,
     list_scroll_on_click: false,
     md_view_mode: 'preview',
+    md_split_edit_left: false,
+    md_split_sync_scroll: true,
     auto_check_update: true,
     find_is_regexp: false,
     find_is_ignore_case: false,
