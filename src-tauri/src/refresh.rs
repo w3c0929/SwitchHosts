@@ -741,18 +741,46 @@ async fn fetch_remote(url: &str, state: &AppState) -> Result<String, RefreshErro
         .map_err(|message| RefreshError::Fetch { message })
 }
 
+/// Resolve the path part of a `file://` URL.
+///
+/// Uses the URL parser so percent escapes (`%20`, UTF-8 paths), the optional
+/// `localhost` host and Windows drive letters (`/C:/x` → `C:\x`) are handled
+/// the same way on every platform. Returns `None` for anything that is not a
+/// plain local path (a remote host, or a query/fragment) — callers treat that
+/// as an unreadable source instead of guessing.
+pub(crate) fn local_file_url_path(stripped: &str) -> Option<PathBuf> {
+    // `stripped` is the URL without the "file://" prefix.
+    let url = reqwest::Url::parse(&format!("file://{stripped}")).ok()?;
+    if url.query().is_some() || url.fragment().is_some() {
+        return None;
+    }
+    let host = url.host_str().unwrap_or("");
+    if !host.is_empty() && !host.eq_ignore_ascii_case("localhost") {
+        return None;
+    }
+    if let Ok(path) = url.to_file_path() {
+        return Some(path);
+    }
+    // Windows 上 `file:///tmp/x` 没有盘符，`to_file_path` 会拒绝。此时按
+    // URL path 直接使用，保持旧的 Unix 风格路径行为（含百分号转义）。
+    let path = crate::script_trigger::percent_decode(url.path());
+    if path.is_empty() {
+        None
+    } else {
+        Some(PathBuf::from(path))
+    }
+}
+
 fn read_file_url(stripped: &str, original: &str) -> Result<String, RefreshError> {
-    // After `strip_prefix("file://")`:
-    //   `file:///Users/x/foo`        → `/Users/x/foo`
-    //   `file://localhost/Users/x/y` → `localhost/Users/x/y`
-    // We tolerate the optional `localhost` host segment so both forms
-    // work the same way. Anything else is treated as an opaque path.
-    let path = stripped.strip_prefix("localhost").unwrap_or(stripped);
-    http::read_text_file_with_limit(Path::new(path), http::MAX_REMOTE_HOSTS_BYTES).map_err(
-        |message| RefreshError::Fetch {
+    let path = local_file_url_path(stripped).ok_or_else(|| RefreshError::Fetch {
+        message: format!("{original}: not a local file path"),
+    })?;
+    // 编码感知读取：BOM / UTF-8 / GBK 都能正确解码（中文注释不再乱码）。
+    crate::hosts_text::read_text_file(&path, http::MAX_REMOTE_HOSTS_BYTES).map_err(|message| {
+        RefreshError::Fetch {
             message: format!("{original}: {message}"),
-        },
-    )
+        }
+    })
 }
 
 /// Download-type scheme (as_hosts = false + configured save_path):
@@ -769,7 +797,9 @@ async fn download_to_file(
     let target = PathBuf::from(save_path);
 
     if let Some(stripped) = url.strip_prefix("file://") {
-        let src = PathBuf::from(stripped.strip_prefix("localhost").unwrap_or(stripped));
+        let src = local_file_url_path(stripped).ok_or_else(|| RefreshError::Fetch {
+            message: format!("{url}: not a local file path"),
+        })?;
         return copy_file_download(&src, &target).map_err(|message| RefreshError::Fetch {
             message,
         });
@@ -1444,6 +1474,43 @@ mod tests {
             "re-acquire after drop"
         );
         drop(_g2);
+    }
+
+    #[test]
+    fn local_file_url_path_resolves_escapes_and_rejects_remote_hosts() {
+        let plain = local_file_url_path("/tmp/hosts").expect("plain path");
+        assert!(plain.ends_with("hosts"));
+
+        let localhost = local_file_url_path("localhost/tmp/hosts").expect("localhost form");
+        assert!(localhost.ends_with("hosts"));
+
+        // 百分号转义：空格与中文（UTF-8）必须解码。
+        let escaped =
+            local_file_url_path("/tmp/a%20b/%E4%B8%AD%E6%96%87.hosts").expect("percent escapes");
+        assert_eq!(
+            escaped.file_name().and_then(|n| n.to_str()),
+            Some("中文.hosts")
+        );
+        assert_eq!(
+            escaped.parent().and_then(|p| p.file_name()).and_then(|n| n.to_str()),
+            Some("a b")
+        );
+
+        // 远程主机、查询串与片段不是本地路径。
+        assert!(local_file_url_path("example.com/hosts").is_none());
+        assert!(local_file_url_path("/tmp/hosts?raw=1").is_none());
+        assert!(local_file_url_path("/tmp/hosts#top").is_none());
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn local_file_url_path_maps_windows_drive_letters() {
+        let path =
+            local_file_url_path("/C:/Windows/System32/drivers/etc/hosts").expect("drive letter");
+        assert_eq!(
+            path.to_string_lossy(),
+            "C:\\Windows\\System32\\drivers\\etc\\hosts"
+        );
     }
 
     #[test]

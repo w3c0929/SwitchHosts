@@ -277,11 +277,18 @@ const HostsEditor = () => {
    * at extension-creation time — reusing the mount-time extensions would silently
    * revert any subsequent readOnly reconfigure.
    */
+  const onOpenUrl = (url: string) => {
+    agent.broadcast(events.browser_link, url)
+    actions.openUrl(url).catch((e) => console.error(e))
+  }
+
   const rebuildExtensions = () =>
     buildExtensions({
       initialReadOnly: refReadOnly.current,
       onDocChange,
       onGutterClick,
+      onOpenUrl,
+      isMac: agent.platform === 'darwin',
       markdown: refIsMd.current,
     })
 

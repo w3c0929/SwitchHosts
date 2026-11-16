@@ -5,7 +5,7 @@
 
 import { httpApiPort } from '@common/constants'
 import { ConfigsType } from '@common/default_configs'
-import { Box, Button, Checkbox, Group, Stack, Tooltip } from '@mantine/core'
+import { Box, Button, Checkbox, Group, NumberInput, Stack, Text, Tooltip } from '@mantine/core'
 import ConfirmModal from '@renderer/components/ConfirmModal'
 import DescriptionText, { checkboxDescriptionStyles } from '@renderer/components/DescriptionText'
 import ChangeDataDirModal from '@renderer/components/Pref/ChangeDataDirModal'
@@ -175,7 +175,9 @@ const Advanced = (props: IProps) => {
               checked={data.http_api_on}
               onChange={(e) => onChange({ http_api_on: e.target.checked })}
               label={lang.http_api_on}
-              description={i18n.trans('http_api_on_desc', [httpApiPort.toString()])}
+              description={i18n.trans('http_api_on_desc', [
+                (data.http_api_port || httpApiPort).toString(),
+              ])}
               styles={checkboxDescriptionStyles}
             />
             <Box pl="28px">
@@ -186,6 +188,23 @@ const Advanced = (props: IProps) => {
                 label={lang.http_api_only_local}
               />
             </Box>
+            <Group pl="28px" gap="8px" align="center">
+              <Text size="sm">{lang.http_api_port}</Text>
+              <NumberInput
+                aria-label={lang.http_api_port}
+                disabled={!data.http_api_on}
+                min={1024}
+                max={65535}
+                clampBehavior="blur"
+                w={120}
+                value={data.http_api_port || httpApiPort}
+                onChange={(v) => {
+                  const port = Number(v) || 0
+                  if (port >= 1024 && port <= 65535) onChange({ http_api_port: port })
+                }}
+              />
+              <DescriptionText style={{ margin: 0 }}>{lang.http_api_port_desc}</DescriptionText>
+            </Group>
           </Stack>
         </Box>
       </Stack>

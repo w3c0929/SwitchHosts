@@ -53,6 +53,7 @@
     refresh_remote_hosts_on_startup: false,
     http_api_on: false,
     http_api_only_local: true,
+    http_api_port: 50761,
     tray_mini_window: true,
     multi_chose_folder_switch_all: false,
     list_scroll_on_click: false,

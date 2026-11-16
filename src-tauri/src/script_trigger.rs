@@ -67,7 +67,7 @@ pub fn is_script_trigger_url(url: &str) -> bool {
 
 /// Decode `%XX` escapes into bytes (lenient: malformed sequences are
 /// passed through verbatim), then interpret as UTF-8 lossily.
-fn percent_decode(s: &str) -> String {
+pub(crate) fn percent_decode(s: &str) -> String {
     let bytes = s.as_bytes();
     let mut out = Vec::with_capacity(bytes.len());
     let mut i = 0;

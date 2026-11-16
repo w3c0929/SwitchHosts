@@ -6,6 +6,7 @@ mod find;
 // it via `switchhosts_lib::helper_proto`.
 pub mod helper_proto;
 mod hosts_apply;
+mod hosts_text;
 mod http;
 mod http_api;
 mod i18n;
@@ -411,16 +412,16 @@ pub fn run() {
                 // Wakes every 60s, replaces `src/main/libs/cron.ts`.
                 refresh::start_background_scanner(app_handle.clone());
 
-                // Local HTTP API on port 50761. Only started if the user
-                // turned it on in the preferences pane; the config_set /
-                // config_update commands also call start/stop on the fly
-                // when the renderer flips the toggle.
-                let (http_on, only_local) = {
+                // Local HTTP API (default port 50761, user-configurable).
+                // Only started if the user turned it on in the preferences
+                // pane; the config_set / config_update commands also call
+                // start/stop on the fly when the renderer flips the toggle.
+                let (http_on, only_local, http_port) = {
                     let cfg = app_state.config.lock().expect("config mutex poisoned");
-                    (cfg.http_api_on, cfg.http_api_only_local)
+                    (cfg.http_api_on, cfg.http_api_only_local, cfg.http_api_port)
                 };
                 if http_on {
-                    if let Err(e) = http_api::start(app_handle.clone(), only_local) {
+                    if let Err(e) = http_api::start(app_handle.clone(), only_local, http_port) {
                         log::warn!("http_api startup failed: {e}");
                     }
                 }

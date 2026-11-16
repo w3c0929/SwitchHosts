@@ -4,6 +4,7 @@
  */
 
 import StatusBar from '@renderer/components/StatusBar'
+import { actions, agent } from '@renderer/core/agent'
 import { EditorState } from '@codemirror/state'
 import { EditorView } from '@codemirror/view'
 import clsx from 'clsx'
@@ -28,6 +29,10 @@ const HostsViewer = (props: Props) => {
       initialReadOnly: true,
       onDocChange: () => {},
       onGutterClick: () => {},
+      onOpenUrl: (url) => {
+        actions.openUrl(url).catch((e) => console.error(e))
+      },
+      isMac: agent.platform === 'darwin',
     })
     const view = new EditorView({
       state: EditorState.create({ doc: content, extensions: built.extensions }),

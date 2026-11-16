@@ -8,11 +8,19 @@
  *   - history + default keymap, no Tab binding (preserves accessibility focus nav)
  */
 
-import { Compartment, EditorState, type Extension, RangeSetBuilder } from '@codemirror/state'
 import {
+  Compartment,
+  EditorState,
+  type Extension,
+  RangeSetBuilder,
+} from '@codemirror/state'
+import {
+  crosshairCursor,
   Decoration,
   type DecorationSet,
+  drawSelection,
   EditorView,
+  rectangularSelection,
   keymap,
   lineNumbers,
   ViewPlugin,
@@ -21,6 +29,7 @@ import {
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands'
 import { markdown } from '@codemirror/lang-markdown'
 import { isHostsCommentLine, isValidHostsLine } from './hosts_highlight'
+import { commentLinks } from './hosts_links'
 
 const IP_RE = /^(\s*)([\w.:%]+)/
 
@@ -107,12 +116,22 @@ const hostsTheme = EditorView.theme({
     fontSize: '12px',
     userSelect: 'none',
   },
+  // drawSelection 绘制的选区背景：用主题选中色并降低不透明度，
+  // 保证深浅色下文字都可读。
+  '.cm-selectionBackground, &.cm-focused .cm-selectionBackground': {
+    backgroundColor: 'var(--swh-tree-selected-bg)',
+    opacity: '0.35',
+  },
 })
 
 export interface BuildExtensionsOptions {
   initialReadOnly: boolean
   onDocChange: (next: string) => void
   onGutterClick: (lineIndex: number) => void
+  /** 打开注释里的链接（Ctrl/Cmd + 点击）。 */
+  onOpenUrl: (url: string) => void
+  /** macOS 用 Cmd，其它平台用 Ctrl。 */
+  isMac?: boolean
   /** Markdown 源码模式：启用 Markdown 语法高亮，关闭 hosts 专用高亮与行号点击注释。 */
   markdown?: boolean
 }
@@ -126,6 +145,8 @@ export function buildExtensions({
   initialReadOnly,
   onDocChange,
   onGutterClick,
+  onOpenUrl,
+  isMac = false,
   markdown: isMarkdown = false,
 }: BuildExtensionsOptions): BuiltExtensions {
   const readOnlyCompartment = new Compartment()
@@ -146,11 +167,20 @@ export function buildExtensions({
 
   const extensions: Extension[] = [
     history(),
+    // 多选区是列选择的前提：不开启时 dispatch 会把多 range 折叠成一个。
+    EditorState.allowMultipleSelections.of(true),
     gutter,
     keymap.of([...defaultKeymap, ...historyKeymap]),
+    // Alt + 拖动 = 矩形（列）选择，多行同列可一次编辑；平时不改变行为。
+    // drawSelection 负责绘制选区：多选区（列选择）只能由它渲染。
+    rectangularSelection(),
+    crosshairCursor(),
+    drawSelection(),
     // md 源码用 Markdown 语法高亮；hosts 专用的注释/IP/错误高亮只在
     // 普通 hosts 条目启用（否则 Markdown 文本会被全量标红）。
     isMarkdown ? markdown() : hostsHighlighter,
+    // 注释内链接只在 hosts 条目启用（Markdown 的链接由预览渲染处理）。
+    ...(isMarkdown ? [] : [commentLinks(isMac, onOpenUrl)]),
     hostsTheme,
     EditorView.updateListener.of((u) => {
       if (u.docChanged) onDocChange(u.state.doc.toString())

@@ -116,6 +116,8 @@ export default {
   http_api_on_desc:
     '포트 {0}에서 실행되며, Alfred와 같은 서드파티 소프트웨어를 통해 호스트를 전환하는데 사용할 수 있습니다.',
   http_api_only_local: 'HTTP API를 127.0.0.1에서만 수신',
+  http_api_port: 'API 포트',
+  http_api_port_desc: '변경 후 로컬 API가 즉시 다시 시작됩니다.',
   http_api_start_failed: '로컬 HTTP API 시작 실패: {0}',
   ignore_case: '대소문자 무시',
   import: '가져오기',

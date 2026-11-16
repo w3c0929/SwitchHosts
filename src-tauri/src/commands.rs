@@ -289,9 +289,9 @@ fn apply_launch_at_login(app: &AppHandle<Wry>, enabled: bool) -> Result<(), Stor
 /// Pinned to `Wry` because the HTTP API server is itself pinned to
 /// `Wry` (see the comment in `http_api.rs`).
 fn apply_side_effects(app: &AppHandle<Wry>, state: &AppState, touched_keys: &[&str]) {
-    let touches_http_api = touched_keys
-        .iter()
-        .any(|k| *k == "http_api_on" || *k == "http_api_only_local");
+    let touches_http_api = touched_keys.iter().any(|k| {
+        *k == "http_api_on" || *k == "http_api_only_local" || *k == "http_api_port"
+    });
     let touches_locale = touched_keys.iter().any(|k| *k == "locale");
     let touches_tray_title = touched_keys.iter().any(|k| *k == "show_title_on_tray");
     let touches_auto_update = touched_keys.iter().any(|k| *k == "auto_check_update");
@@ -324,12 +324,12 @@ fn apply_side_effects(app: &AppHandle<Wry>, state: &AppState, touched_keys: &[&s
     }
 
     if touches_http_api {
-        let (on, only_local) = {
+        let (on, only_local, port) = {
             let cfg = state.config.lock().expect("config mutex poisoned");
-            (cfg.http_api_on, cfg.http_api_only_local)
+            (cfg.http_api_on, cfg.http_api_only_local, cfg.http_api_port)
         };
         if on {
-            if let Err(e) = http_api::start(app.clone(), only_local) {
+            if let Err(e) = http_api::start(app.clone(), only_local, port) {
                 log::warn!("http_api start failed: {e}");
                 // Roll back the in-memory config + persist, otherwise
                 // the preferences pane keeps reporting "API on" against

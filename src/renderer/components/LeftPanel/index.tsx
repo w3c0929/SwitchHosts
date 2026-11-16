@@ -33,9 +33,13 @@ const Index = (_props: Props) => {
 
   return (
     <div
+      data-testid="left-panel"
       className={styles.root}
-      onContextMenu={() => {
-        if (view === 'list') menu.show()
+      onContextMenu={(event) => {
+        if (view !== 'list') return
+        // 列表空白区域右键：阻止 WebView 自带的网页菜单，只显示应用菜单。
+        event.preventDefault()
+        menu.show()
       }}
     >
       <ScrollArea className={styles.content} scrollbars="y" type="hover">

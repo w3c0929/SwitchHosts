@@ -74,6 +74,8 @@ pub struct AppConfig {
     // http api
     pub http_api_on: bool,
     pub http_api_only_local: bool,
+    /// HTTP API 监听端口。0 或非法值在 normalize 中回退为默认端口。
+    pub http_api_port: u16,
 
     // update
     pub auto_check_update: bool,
@@ -128,6 +130,7 @@ impl Default for AppConfig {
 
             http_api_on: false,
             http_api_only_local: true,
+            http_api_port: crate::http_api::HTTP_API_PORT,
 
             auto_check_update: true,
 
@@ -150,6 +153,9 @@ impl AppConfig {
             "preview" | "preview-edit" | "source"
         ) {
             self.md_view_mode = "preview".to_string();
+        }
+        if self.http_api_port == 0 {
+            self.http_api_port = crate::http_api::HTTP_API_PORT;
         }
         if self.proxy_port > MAX_PROXY_PORT {
             self.proxy_port = MAX_PROXY_PORT;
@@ -346,6 +352,19 @@ mod tests {
             .unwrap();
 
         assert!(cfg.quit_on_close);
+    }
+
+    #[test]
+    fn defaults_http_api_port_and_normalizes_zero() {
+        let cfg = AppConfig::default();
+        assert_eq!(cfg.http_api_port, crate::http_api::HTTP_API_PORT);
+
+        let mut cfg = AppConfig::default();
+        cfg.apply_partial(&json!({ "http_api_port": 0 })).unwrap();
+        assert_eq!(cfg.http_api_port, crate::http_api::HTTP_API_PORT);
+
+        cfg.apply_partial(&json!({ "http_api_port": 8080 })).unwrap();
+        assert_eq!(cfg.http_api_port, 8080);
     }
 
     #[test]

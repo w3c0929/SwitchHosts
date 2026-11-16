@@ -9,6 +9,7 @@
 //! | GET    | `/remote-test` | `# remote-test\n# <timestamp>` |
 //! | GET    | `/api/list`    | `{success, data: flat_list}` JSON |
 //! | GET    | `/api/toggle?id=<id>` | `ok` / `bad id.` / `not found.` |
+//! | GET    | `/api/refresh?id=<id>` | `{success, code?, message?, data?}` JSON |
 //!
 //! Lifecycle:
 //!
@@ -63,17 +64,18 @@ pub const HTTP_API_PORT: u16 = 50761;
 struct ServerHandle {
     task: tauri::async_runtime::JoinHandle<()>,
     only_local: bool,
+    port: u16,
 }
 
 static SERVER: Mutex<Option<ServerHandle>> = Mutex::new(None);
 
 /// Start the HTTP server. Idempotent: a second call with the same
-/// `only_local` value is a no-op; with a different value the existing
-/// server is stopped and a new one is bound.
-pub fn start(app: AppHandle<Wry>, only_local: bool) -> Result<(), String> {
+/// `only_local` and `port` is a no-op; otherwise the existing server is
+/// stopped and a new one is bound.
+pub fn start(app: AppHandle<Wry>, only_local: bool, port: u16) -> Result<(), String> {
     let mut guard = SERVER.lock().expect("http server mutex poisoned");
     if let Some(existing) = guard.as_ref() {
-        if existing.only_local == only_local {
+        if existing.only_local == only_local && existing.port == port {
             return Ok(());
         }
     }
@@ -86,7 +88,7 @@ pub fn start(app: AppHandle<Wry>, only_local: bool) -> Result<(), String> {
     } else {
         IpAddr::V4(Ipv4Addr::UNSPECIFIED)
     };
-    let addr = SocketAddr::new(ip, HTTP_API_PORT);
+    let addr = SocketAddr::new(ip, port);
 
     // Bind synchronously so port-conflict errors surface to the caller
     // (and through it the renderer / config-update flow). Doing the
@@ -108,7 +110,11 @@ pub fn start(app: AppHandle<Wry>, only_local: bool) -> Result<(), String> {
         }
     });
 
-    *guard = Some(ServerHandle { task, only_local });
+    *guard = Some(ServerHandle {
+        task,
+        only_local,
+        port,
+    });
     log::info!("listening on http://{addr}");
     Ok(())
 }
@@ -130,6 +136,7 @@ async fn serve(app: AppHandle<Wry>, std_listener: std::net::TcpListener) -> Resu
         .route("/remote-test", get(remote_test))
         .route("/api/list", get(api_list))
         .route("/api/toggle", get(api_toggle))
+        .route("/api/refresh", get(api_refresh))
         .with_state(AppRouterState { app });
 
     let listener = tokio::net::TcpListener::from_std(std_listener)
@@ -205,6 +212,41 @@ async fn api_toggle(
     // other Tauri broadcast in this codebase uses.
     let _ = state.app.emit("toggle_item", json!({ "_args": [id, !on] }));
     "ok"
+}
+
+/// `GET /api/refresh?id=<id>`：立即刷新一个远程方案。
+///
+/// 与手动刷新走同一条 `refresh::refresh_one` 链路：并发去重、时间戳
+/// 更新、通知与内容联动都保持一致。返回结构同 `refresh_remote_hosts`。
+async fn api_refresh(
+    State(state): State<AppRouterState>,
+    Query(q): Query<ToggleQuery>,
+) -> Response {
+    let Some(id) = q.id.filter(|id| !id.is_empty()) else {
+        return Json(json!({
+            "success": false,
+            "code": "invalid_id",
+            "message": "id is required",
+        }))
+        .into_response();
+    };
+    log::info!("refresh: {id}");
+
+    let app_state = state.app.state::<AppState>();
+    use crate::refresh::{refresh_one, RefreshOutcome};
+    let result = match refresh_one(&state.app, app_state.inner(), &id).await {
+        Ok(RefreshOutcome::Updated { node }) | Ok(RefreshOutcome::Unchanged { node }) => {
+            json!({ "success": true, "data": node })
+        }
+        Err(e) => {
+            let mut value = e.into_renderer_value();
+            if let Some(obj) = value.as_object_mut() {
+                obj.insert("id".to_string(), json!(id));
+            }
+            value
+        }
+    };
+    Json(result).into_response()
 }
 
 // ---- tree helpers ----------------------------------------------------------

@@ -115,6 +115,8 @@ const lang: LanguageDict = {
   http_api_on: '開啟 HTTP API',
   http_api_on_desc: '運行於 {0} 通訊埠，可用於 Alfred 等第三方應用切換 hosts。',
   http_api_only_local: 'HTTP API 僅監聽 127.0.0.1',
+  http_api_port: 'API 連接埠',
+  http_api_port_desc: '修改後立即重新啟動本機 API 服務。',
   http_api_start_failed: '啟動本機 HTTP API 失敗：{0}',
   ignore_case: '忽略大小寫',
   import: '匯入',
